@@ -78,7 +78,7 @@ echo.
 
 REM Step 3.2: Clean install of dependencies
 echo  - Installing dependencies using 'npm ci'...
-call npm ci
+npx npm ci
 IF %ERRORLEVEL% NEQ 0 (
     echo ❌ ERROR: 'npm ci' failed. Check package-lock.json and npm logs.
     goto:eof
@@ -88,7 +88,7 @@ echo.
 
 REM Step 3.2: Build and Deploy using gh-pages
 echo  - Building project and deploying...
-call npm run deploy
+npx npm run deploy
 IF %ERRORLEVEL% NEQ 0 (
     echo ❌ ERROR: 'npm run deploy' failed. Check the build logs for errors.
     goto:eof
