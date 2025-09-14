@@ -107,7 +107,7 @@ echo.
 
 
 echo ======================================================
-echo = 🚀 SAVE & DEPLOYMENT COMPLETE!                      =
+echo = 🚀 SAVE ^& DEPLOYMENT COMPLETE!                      =
 echo ======================================================
 echo.
 
