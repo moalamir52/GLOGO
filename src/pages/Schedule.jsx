@@ -1036,6 +1036,113 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
           }}>Weekly Car Wash Schedule</h1>
         </div>
       </div>
+      {/* Worker Car Counts and Client Stats */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+        gap: '1.5rem',
+        marginBottom: '2rem'
+      }}>
+        <div style={{
+          backgroundColor: '#DAF2D0',
+          borderRadius: '15px',
+          padding: '1.5rem',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <h3 style={{
+            color: '#548235',
+            fontSize: '1.3rem',
+            fontWeight: '600',
+            marginBottom: '1rem',
+            textAlign: 'center'
+          }}>👷 Worker Car Counts</h3>
+          {workers.map(worker => (
+            <div key={worker} 
+              onClick={() => openWorkerAppointmentsModal(worker)} 
+              style={{
+                cursor: 'pointer',
+                padding: '12px 16px',
+                margin: '8px 0',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+                border: '1px solid #e2e8f0',
+                transition: 'all 0.3s ease',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+              }}
+              onMouseOver={(e) => {
+                e.target.style.transform = 'translateY(-2px)';
+                e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+              }}
+              onMouseOut={(e) => {
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = 'none';
+              }}
+            >
+              <span style={{ fontWeight: '600', color: '#374151' }}>{worker}</span>
+              <span style={{
+                backgroundColor: '#548235',
+                color: 'white',
+                padding: '4px 12px',
+                borderRadius: '20px',
+                fontSize: '0.9rem',
+                fontWeight: '600'
+              }}>{workerCarCounts[worker] || 0} cars</span>
+            </div>
+          ))}
+        </div>
+        
+        <div style={{
+          backgroundColor: '#DAF2D0',
+          borderRadius: '15px',
+          padding: '1.5rem',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+          border: '1px solid rgba(255,255,255,0.2)'
+        }}>
+          <h3 style={{
+            color: '#548235',
+            fontSize: '1.3rem',
+            fontWeight: '600',
+            marginBottom: '1rem',
+            textAlign: 'center'
+          }}>🏠 Client Stats</h3>
+          <div 
+            onClick={openUniqueVillasModal}
+            style={{
+              cursor: 'pointer',
+              padding: '12px 16px',
+              borderRadius: '10px',
+              background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
+              border: '1px solid #e2e8f0',
+              transition: 'all 0.3s ease',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.transform = 'translateY(-2px)';
+              e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = 'none';
+            }}
+          >
+            <span style={{ fontWeight: '600', color: '#374151' }}>Total Unique Villas</span>
+            <span style={{
+              backgroundColor: '#28a745',
+              color: 'white',
+              padding: '4px 12px',
+              borderRadius: '20px',
+              fontSize: '0.9rem',
+              fontWeight: '600'
+            }}>{uniqueVillaCount}</span>
+          </div>
+        </div>
+      </div>
+
       <div className="form-container">
         <form onSubmit={handleSubmit}>
           <div className="form-field">
@@ -1236,112 +1343,6 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
             marginBottom: '0.5rem'
           }}>🗑️ Clear Storage</button>
         </form>
-      </div>
-
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-        gap: '1.5rem',
-        marginBottom: '2rem'
-      }}>
-        <div style={{
-          backgroundColor: '#DAF2D0',
-          borderRadius: '15px',
-          padding: '1.5rem',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-          border: '1px solid rgba(255,255,255,0.2)'
-        }}>
-          <h3 style={{
-            color: '#548235',
-            fontSize: '1.3rem',
-            fontWeight: '600',
-            marginBottom: '1rem',
-            textAlign: 'center'
-          }}>👷 Worker Car Counts</h3>
-          {workers.map(worker => (
-            <div key={worker} 
-              onClick={() => openWorkerAppointmentsModal(worker)} 
-              style={{
-                cursor: 'pointer',
-                padding: '12px 16px',
-                margin: '8px 0',
-                borderRadius: '10px',
-                background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-                border: '1px solid #e2e8f0',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center'
-              }}
-              onMouseOver={(e) => {
-                e.target.style.transform = 'translateY(-2px)';
-                e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
-              }}
-              onMouseOut={(e) => {
-                e.target.style.transform = 'translateY(0)';
-                e.target.style.boxShadow = 'none';
-              }}
-            >
-              <span style={{ fontWeight: '600', color: '#374151' }}>{worker}</span>
-              <span style={{
-                backgroundColor: '#548235',
-                color: 'white',
-                padding: '4px 12px',
-                borderRadius: '20px',
-                fontSize: '0.9rem',
-                fontWeight: '600'
-              }}>{workerCarCounts[worker] || 0} cars</span>
-            </div>
-          ))}
-        </div>
-        
-        <div style={{
-          backgroundColor: '#DAF2D0',
-          borderRadius: '15px',
-          padding: '1.5rem',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
-          border: '1px solid rgba(255,255,255,0.2)'
-        }}>
-          <h3 style={{
-            color: '#548235',
-            fontSize: '1.3rem',
-            fontWeight: '600',
-            marginBottom: '1rem',
-            textAlign: 'center'
-          }}>🏠 Client Stats</h3>
-          <div 
-            onClick={openUniqueVillasModal}
-            style={{
-              cursor: 'pointer',
-              padding: '12px 16px',
-              borderRadius: '10px',
-              background: 'linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%)',
-              border: '1px solid #e2e8f0',
-              transition: 'all 0.3s ease',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center'
-            }}
-            onMouseOver={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 4px 15px rgba(0,0,0,0.1)';
-            }}
-            onMouseOut={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = 'none';
-            }}
-          >
-            <span style={{ fontWeight: '600', color: '#374151' }}>Total Unique Villas</span>
-            <span style={{
-              backgroundColor: '#28a745',
-              color: 'white',
-              padding: '4px 12px',
-              borderRadius: '20px',
-              fontSize: '0.9rem',
-              fontWeight: '600'
-            }}>{uniqueVillaCount}</span>
-          </div>
-        </div>
       </div>
 
       {isExportModalOpen && (
