@@ -235,6 +235,11 @@ h2 { color: #495057; font-size: 1.75rem; }
 .worker-raqib { background-color: #007bff; }
 .worker-rahman { background-color: #28a745; }
 
+.secondary-worker-card {
+  background-color: #dc3545; /* Red color for secondary worker */
+  border: 2px dashed #a71d2a; /* Optional: dashed border for distinction */
+}
+
 /* Modal Styles */
 .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
 .modal-content { background-color: #ffffff; color: #333; padding: 2rem; border-radius: 12px; width: 90%; max-width: 500px; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
@@ -243,3 +248,28 @@ h2 { color: #495057; font-size: 1.75rem; }
 .modal-actions { margin-top: 2.5rem; display: flex; justify-content: space-between; gap: 1rem; }
 .modal-actions button { padding: 0.8rem 1rem; flex-grow: 1; font-weight: bold; border-radius: 8px; border: none; cursor: pointer; }
 .delete-btn-modal { background-color: #dc3545; color: white; }
+
+/* Styles for CustomAlertDialog */
+.custom-alert-dialog .modal-actions button {
+  background-color: #4CAF50; /* Green */
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 16px;
+  margin: 0 5px;
+  transition: background-color 0.3s ease;
+}
+
+.custom-alert-dialog .modal-actions button:hover {
+  background-color: #45a049;
+}
+
+.custom-alert-dialog .modal-actions button:nth-child(odd) { /* Apply different style to 'Cancel' or 'No' buttons */
+  background-color: #f44336; /* Red */
+}
+
+.custom-alert-dialog .modal-actions button:nth-child(odd):hover {
+  background-color: #da190b;
+}

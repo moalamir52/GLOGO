@@ -1,0 +1,3 @@
+@echo off
+echo Starting the development server and opening the browser...
+npm start

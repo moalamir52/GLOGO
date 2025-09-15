@@ -6,6 +6,7 @@
   "homepage": "https://moalamir52.github.io/Schedule",
   "scripts": {
     "dev": "vite",
+    "start": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",

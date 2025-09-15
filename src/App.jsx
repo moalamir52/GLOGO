@@ -11,6 +11,7 @@ const WorkerIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="n
 
 // --- Data Constants ---
 const initialAppointments = [];
+const NO_WORKER_SELECTED = 'none';
 const daysOfWeek = ["Saturday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const workers = ["Raqib", "Rahman"];
 const timeSlots = Array.from({ length: 14 }, (_, i) => {
@@ -32,6 +33,15 @@ function EditModal({ appointment, onSave, onDelete, onClose }) {
     onSave(modalData);
   };
 
+  // Filtered workers for primary worker dropdown
+  const filteredPrimaryWorkers = workers.filter(worker =>
+    worker !== modalData.secondaryWorker && modalData.secondaryWorker !== NO_WORKER_SELECTED
+  );
+  // Filtered workers for secondary worker dropdown
+  const filteredSecondaryWorkers = workers.filter(worker =>
+    worker !== modalData.worker && modalData.worker !== NO_WORKER_SELECTED
+  );
+
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-content" onClick={e => e.stopPropagation()}>
@@ -47,7 +57,16 @@ function EditModal({ appointment, onSave, onDelete, onClose }) {
           <input type="time" name="time" value={modalData.time} onChange={handleChange} />
           <label>Worker:</label>
           <select name="worker" value={modalData.worker} onChange={handleChange}>
-            {workers.map(worker => <option key={worker} value={worker}>{worker}</option>)}
+            {/* Ensure the currently selected worker is always an option, even if it conflicts */}
+            {modalData.worker && <option key={modalData.worker} value={modalData.worker}>{modalData.worker}</option>}
+            {filteredPrimaryWorkers.map(worker => <option key={worker} value={worker}>{worker}</option>)}
+          </select>
+          <label>Secondary Worker:</label>
+          <select name="secondaryWorker" value={modalData.secondaryWorker} onChange={handleChange}>
+            <option value={NO_WORKER_SELECTED}>None</option>
+            {/* Ensure the currently selected secondary worker is always an option, even if it conflicts */}
+            {modalData.secondaryWorker && modalData.secondaryWorker !== NO_WORKER_SELECTED && <option key={modalData.secondaryWorker} value={modalData.secondaryWorker}>{modalData.secondaryWorker}</option>}
+            {filteredSecondaryWorkers.map(worker => <option key={worker} value={worker}>{worker}</option>)}
           </select>
           <div className="modal-actions">
             <button type="submit">Save Changes</button>
@@ -109,23 +128,103 @@ function ExportModal({ onClose, onExport }) {
   );
 }
 
+// --- Custom Alert/Confirm Dialog Component ---
+function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCancel }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal-content custom-alert-dialog" onClick={e => e.stopPropagation()}>
+        <h2>{title}</h2>
+        <p>{message}</p>
+        <div className="modal-actions">
+          {options.includes('cancel') && <button type="button" onClick={onCancel}>Cancel</button>}
+          {options.includes('ok') && <button type="button" onClick={onConfirm}>OK</button>}
+          {options.includes('yes') && <button type="button" onClick={onConfirm}>Yes</button>}
+          {options.includes('no') && <button type="button" onClick={onCancel}>No</button>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // --- Main App Component ---
 function App() {
   const [appointments, setAppointments] = useState(() => {
     const savedAppointments = localStorage.getItem('appointments');
     return savedAppointments ? JSON.parse(savedAppointments) : initialAppointments;
   });
-  const [formData, setFormData] = useState({ villa: '', day: ['Saturday'], time: '06:00', worker: 'Raqib' });
+  const [formData, setFormData] = useState({ villa: '', day: ['Saturday'], time: '06:00', worker: 'Raqib', secondaryWorker: NO_WORKER_SELECTED });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  // State for custom alert/confirm dialog
+  const [alertDialog, setAlertDialog] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    options: [], // e.g., ['ok'], ['yes', 'no']
+    onConfirm: () => {}, 
+    onCancel: () => {}, 
+  });
+
+  const showAlert = (message, title = 'Alert', onConfirm = () => {}) => {
+    setAlertDialog({
+      isOpen: true,
+      title,
+      message,
+      options: ['ok'],
+      onConfirm: () => {
+        setAlertDialog(prev => ({ ...prev, isOpen: false }));
+        onConfirm();
+      },
+      onCancel: () => setAlertDialog(prev => ({ ...prev, isOpen: false })),
+    });
+  };
+
+  const showConfirm = (message, title = 'Confirm', onYes = () => {}, onNo = () => {}) => {
+    setAlertDialog({
+      isOpen: true,
+      title,
+      message,
+      options: ['yes', 'no'],
+      onConfirm: () => {
+        setAlertDialog(prev => ({ ...prev, isOpen: false }));
+        onYes();
+      },
+      onCancel: () => {
+        setAlertDialog(prev => ({ ...prev, isOpen: false }));
+        onNo();
+      },
+    });
+  };
 
   useEffect(() => {
     localStorage.setItem('appointments', JSON.stringify(appointments));
   }, [appointments]);
 
+  const getWorkerCarCounts = () => {
+    const counts = {};
+    workers.forEach(worker => {
+      counts[worker] = 0;
+    });
+
+    appointments.forEach(appt => {
+      if (appt.worker && counts.hasOwnProperty(appt.worker)) {
+        counts[appt.worker]++;
+      }
+      if (appt.secondaryWorker && counts.hasOwnProperty(appt.secondaryWorker)) {
+        counts[appt.secondaryWorker]++;
+      }
+    });
+    return counts;
+  };
+
+  const workerCarCounts = getWorkerCarCounts();
+
   const openExportModal = () => setIsExportModalOpen(true);
-  const closeExportModal = () => setIsExportModalOpen(false);
+  const closeExportModal = () => setIsExportModal(false);
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -142,7 +241,15 @@ function App() {
         setFormData(prev => ({ ...prev, day: selectedDays }));
       }
     } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
+      setFormData(prev => {
+        const newFormData = { ...prev, [name]: value };
+        // If we just changed the primary worker and it's now the same as the secondary,
+        // reset the secondary worker.
+        if (name === 'worker' && newFormData.worker === newFormData.secondaryWorker) {
+          newFormData.secondaryWorker = NO_WORKER_SELECTED;
+        }
+        return newFormData;
+      });
     }
   };
 
@@ -195,12 +302,12 @@ function App() {
         const loadedSettings = JSON.parse(e.target.result);
         if (loadedSettings.appointments) {
           setAppointments(loadedSettings.appointments);
-          alert('Schedule loaded successfully!');
+          showAlert('Schedule loaded successfully!', 'Success');
         } else {
-          alert('Invalid settings file: missing appointments data.');
+          showAlert('Invalid settings file: missing appointments data.', 'Error');
         }
       } catch (error) {
-        alert('Error parsing settings file: ' + error.message);
+        showAlert('Error parsing settings file: ' + error.message, 'Error');
       }
     };
     reader.readAsText(file);
@@ -208,21 +315,27 @@ function App() {
 
 
   const handleResetSchedule = () => {
-    if (window.confirm("Are you sure you want to clear the entire schedule? This action cannot be undone.")) {
-      setAppointments([]);
-      localStorage.removeItem('appointments');
-      alert('Schedule has been reset.');
-    }
+    showConfirm(
+      "Are you sure you want to clear the entire schedule? This action cannot be undone.",
+      "Confirm Reset",
+      () => {
+        setAppointments([]);
+        localStorage.removeItem('appointments');
+        showAlert('Schedule has been reset.', 'Success');
+      }
+    );
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.villa) {
-      alert('Please enter a villa name.');
+      showAlert('Please enter a villa name.', 'Validation Error');
       return;
     }
 
     const appointmentsToAdd = [];
+
+    let shouldAbort = false;
 
     for (const day of formData.day) {
       const isConflict = appointments.some(appt => 
@@ -242,32 +355,98 @@ function App() {
         );
 
         if (alternativeWorker) {
-          if (window.confirm(`Worker "${formData.worker}" is busy on ${day} at ${formData.time}. Assign to "${alternativeWorker}" instead?`)) {
-            appointmentsToAdd.push({ 
-              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${day}-${alternativeWorker}`,
+          showConfirm(
+            `Worker "${formData.worker}" is busy on ${day} at ${formData.time}. Assign to "${alternativeWorker}" instead?`,
+            "Worker Conflict",
+            () => { // On Yes
+              appointmentsToAdd.push({ 
+                id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${day}-${alternativeWorker}`,
+                day,
+                time: formData.time,
+                worker: alternativeWorker,
+                villa: formData.villa
+              });
+            },
+            () => { // On No
+              shouldAbort = true;
+            }
+          );
+          if (shouldAbort) break; // Exit the loop if user declines alternative worker
+        }
+        else {
+          showAlert(`No available workers on ${day} at ${formData.time}. Aborting schedule creation.`, 'No Worker Available');
+          shouldAbort = true;
+          break; // Exit the loop if no alternative worker is found
+        }
+      } else { // No primary worker conflict
+        // Check if the new primary worker is an existing secondary worker for another appointment
+        const secondaryConflictAppt = appointments.find(appt =>
+          appt.day === day &&
+          appt.time === formData.time &&
+          appt.secondaryWorker === formData.worker
+        );
+
+        if (secondaryConflictAppt) {
+          showConfirm(
+            `Worker "${formData.worker}" is currently a secondary worker for villa "${secondaryConflictAppt.villa}" on ${day} at ${formData.time}. Do you want to assign them as primary for this new task and remove them from the secondary task?`,
+            "Secondary Worker Conflict",
+            () => { // On Yes: Remove from secondary, add as primary
+              setAppointments(prev => prev.filter(appt => appt.id !== secondaryConflictAppt.id)); // Remove the old secondary appointment
+              appointmentsToAdd.push({
+                id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${day}-${formData.worker}`,
+                day,
+                time: formData.time,
+                worker: formData.worker,
+                secondaryWorker: formData.secondaryWorker !== NO_WORKER_SELECTED ? formData.secondaryWorker : undefined,
+                villa: formData.villa
+              });
+            },
+            () => { // On No: Abort the current new appointment
+              shouldAbort = true;
+            }
+          );
+          if (shouldAbort) break; // Exit the loop if user declines
+        } else {
+          // Check for secondary worker conflicts (original logic)
+          let secondaryWorkerConflict = false;
+          if (formData.secondaryWorker !== NO_WORKER_SELECTED) {
+            if (formData.secondaryWorker === formData.worker) {
+              showAlert('Primary and secondary workers cannot be the same. Aborting schedule creation.', 'Conflict');
+              shouldAbort = true;
+              break;
+            } else {
+              secondaryWorkerConflict = appointments.some(appt =>
+                appt.day === day &&
+                appt.time === formData.time &&
+                (appt.worker === formData.secondaryWorker || appt.secondaryWorker === formData.secondaryWorker)
+              );
+              if (secondaryWorkerConflict) {
+                showAlert(`Secondary worker "${formData.secondaryWorker}" is busy on ${day} at ${formData.time}. Aborting schedule creation.`, 'Conflict');
+                shouldAbort = true;
+                break;
+              }
+            }
+          }
+
+          if (!secondaryWorkerConflict) {
+            appointmentsToAdd.push({
+              id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${day}-${formData.worker}`,
               day,
               time: formData.time,
-              worker: alternativeWorker,
+              worker: formData.worker,
+              secondaryWorker: formData.secondaryWorker !== NO_WORKER_SELECTED ? formData.secondaryWorker : undefined,
               villa: formData.villa
             });
           }
-        } else {
-          alert(`No available workers on ${day} at ${formData.time}.`);
         }
-      } else {
-        appointmentsToAdd.push({ 
-          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${day}-${formData.worker}`,
-          day,
-          time: formData.time, 
-          worker: formData.worker, 
-          villa: formData.villa
-        });
       }
     }
 
-    if (appointmentsToAdd.length > 0) {
+    if (!shouldAbort && appointmentsToAdd.length > 0) {
       setAppointments(prev => [...prev, ...appointmentsToAdd].sort((a, b) => a.time.localeCompare(b.time)));
       setFormData(prev => ({ ...prev, villa: '' }));
+    } else if (shouldAbort) {
+      showAlert('Schedule creation aborted due to conflicts or user cancellation.', 'Aborted');
     }
   };
 
@@ -282,15 +461,30 @@ function App() {
   };
 
   const handleUpdateAppointment = (updatedAppt) => {
-    setAppointments(prev => prev.map(appt => appt.id === updatedAppt.id ? updatedAppt : appt).sort((a, b) => a.time.localeCompare(b.time)));
+    const finalUpdatedAppt = {
+      ...updatedAppt,
+      secondaryWorker: updatedAppt.secondaryWorker === NO_WORKER_SELECTED ? undefined : updatedAppt.secondaryWorker,
+    };
+
+    // Check if primary and secondary workers are the same
+    if (finalUpdatedAppt.secondaryWorker && finalUpdatedAppt.worker === finalUpdatedAppt.secondaryWorker) {
+      showAlert('Primary and secondary workers cannot be the same for an appointment.', 'Conflict');
+      return; // Prevent the update
+    }
+
+    setAppointments(prev => prev.map(appt => appt.id === finalUpdatedAppt.id ? finalUpdatedAppt : appt).sort((a, b) => a.time.localeCompare(b.time)));
     handleCloseModal();
   };
 
   const handleDeleteAppointment = (idToDelete) => {
-    if (window.confirm("Are you sure you want to delete this appointment?")) {
-      setAppointments(prev => prev.filter(appt => appt.id !== idToDelete));
-      handleCloseModal();
-    }
+    showConfirm(
+      "Are you sure you want to delete this appointment?",
+      "Confirm Delete",
+      () => { // On Yes
+        setAppointments(prev => prev.filter(appt => appt.id !== idToDelete));
+        handleCloseModal();
+      }
+    );
   };
 
   return (
@@ -303,6 +497,15 @@ function App() {
           onClose={handleCloseModal}
         />
       )}
+
+      <CustomAlertDialog
+        isOpen={alertDialog.isOpen}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        options={alertDialog.options}
+        onConfirm={alertDialog.onConfirm}
+        onCancel={alertDialog.onCancel}
+      />
 
       <h1>Weekly Car Wash Schedule</h1>
       <div className="form-container">
@@ -338,6 +541,15 @@ function App() {
               {workers.map(worker => <option key={worker} value={worker}>{worker}</option>)}
             </select>
           </div>
+          <div className="form-field">
+            <label htmlFor="secondary-worker-select"><WorkerIcon /> Secondary Worker:</label>
+            <select id="secondary-worker-select" name="secondaryWorker" value={formData.secondaryWorker} onChange={handleInputChange}>
+              <option value={NO_WORKER_SELECTED}>None</option>
+              {workers
+                .filter(w => w !== formData.worker)
+                .map(worker => <option key={worker} value={worker}>{worker}</option>)}
+            </select>
+          </div>
           <button type="submit" className="add-btn">Add Appointment</button>
           <button type="button" className="export-btn" onClick={openExportModal}>Export to Excel</button>
           <button type="button" className="save-btn" onClick={handleSaveSettings}>Save Settings</button>
@@ -353,6 +565,13 @@ function App() {
           </button>
           <button type="button" className="reset-btn" onClick={handleResetSchedule}>Reset Schedule</button>
         </form>
+      </div>
+
+      <div className="worker-stats">
+        <h2>Worker Car Counts</h2>
+        {workers.map(worker => (
+          <p key={worker}>{worker}: {workerCarCounts[worker] || 0} cars</p>
+        ))}
       </div>
 
       {isExportModalOpen && (
@@ -379,15 +598,25 @@ function App() {
             {daysOfWeek.map(day => (
               <div key={day} className="grid-cell">
                 {workers.map(worker => {
-                  const appointment = appointments.find(
+                  const primaryAppointment = appointments.find(
                     appt => appt.day === day && appt.time.split(':')[0] === time.split(':')[0] && appt.worker === worker
                   );
+                  const secondaryAppointment = appointments.find(
+                    appt => appt.day === day && appt.time.split(':')[0] === time.split(':')[0] && appt.secondaryWorker === worker
+                  );
+
                   return (
                     <div key={worker} className="worker-slot">
-                      {appointment && (
-                        <div className={`appointment-card worker-${appointment.worker.toLowerCase()}`}>
-                          <strong>{appointment.villa}</strong>
-                          <button className="edit-btn" onClick={() => handleEditClick(appointment)}>✏️</button>
+                      {primaryAppointment && (
+                        <div className={`appointment-card worker-${primaryAppointment.worker.toLowerCase()}`}>
+                          <strong>{primaryAppointment.villa}</strong>
+                          <button className="edit-btn" onClick={() => handleEditClick(primaryAppointment)}>✏️</button>
+                        </div>
+                      )}
+                      {secondaryAppointment && (
+                        <div className={`appointment-card secondary-worker-card worker-${secondaryAppointment.secondaryWorker.toLowerCase()}`}>
+                          <strong>{secondaryAppointment.villa}</strong>
+                          <button className="edit-btn" onClick={() => handleEditClick(secondaryAppointment)}>✏️</button>
                         </div>
                       )}
                     </div>
