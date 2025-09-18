@@ -394,6 +394,7 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
     const savedAppointments = localStorage.getItem('appointments');
     return savedAppointments ? JSON.parse(savedAppointments) : initialAppointments;
   });
+  const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({ villa: '', day: ['Saturday'], time: '06:00', worker: 'Raqib', secondaryWorker: NO_WORKER_SELECTED });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
@@ -473,6 +474,13 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
   const workerCarCounts = getWorkerCarCounts();
   const uniqueVillaCount = new Set(appointments.map(a => a.villa)).size;
   const uniqueVillas = Array.from(new Set(appointments.map(a => a.villa))).sort(); // Define uniqueVillas here
+  
+  // Debug: Check localStorage
+  console.log('localStorage appointments:', localStorage.getItem('appointments'));
+  console.log('Current appointments:', appointments);
+  console.log('Appointments length:', appointments.length);
+  
+
 
   const openExportModal = () => {
     setIsModalOpen(false);
@@ -904,6 +912,23 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
   const handleDragEnd = () => {
     setDraggedAppointment(null);
   };
+
+  if (isLoading) {
+    return (
+      <div style={{ 
+        backgroundColor: '#DAF2D0', 
+        borderRadius: '20px', 
+        padding: '2rem', 
+        textAlign: 'center',
+        minHeight: '200px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ fontSize: '1.5rem', color: '#548235' }}>🔄 Loading schedule...</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ backgroundColor: '#DAF2D0', borderRadius: '20px', padding: '2rem', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -1344,10 +1369,10 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
               <div key={day} className="grid-cell">
                 {workers.map(worker => {
                   const primaryAppointment = appointments.find(
-                    appt => appt.day === day && appt.time.split(':')[0] === time.split(':')[0] && appt.worker === worker
+                    appt => appt.day === day && appt.time === time && appt.worker === worker
                   );
                   const secondaryAppointment = appointments.find(
-                    appt => appt.day === day && appt.time.split(':')[0] === time.split(':')[0] && appt.secondaryWorker === worker
+                    appt => appt.day === day && appt.time === time && appt.secondaryWorker === worker
                   );
 
                   const term = searchTerm.toLowerCase();

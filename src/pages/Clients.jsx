@@ -125,18 +125,35 @@ const googleSheetUrl = 'https://docs.google.com/spreadsheets/d/1sG0itNKcxg10mOzb
 function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, navigateToReport }) {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const searchInputRef = useRef(null);
-  const [clientsData, setClientsData] = useState(() => {
-    const savedClients = localStorage.getItem('clientsData');
-    return savedClients ? JSON.parse(savedClients) : defaultClients;
-  });
+  const [clientsData, setClientsData] = useState(defaultClients);
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [showComparison, setShowComparison] = useState(false);
   const [selectedClientForInvoice, setSelectedClientForInvoice] = useState(null);
 
+  // Load clients data from localStorage on component mount
   useEffect(() => {
-    localStorage.setItem('clientsData', JSON.stringify(clientsData));
-  }, [clientsData]);
+    const savedData = localStorage.getItem('clientsData');
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        if (parsedData.length > 0) {
+          setClientsData(parsedData);
+        }
+      } catch (error) {
+        console.error('Error loading clients data:', error);
+      }
+    }
+    setIsDataLoading(false);
+  }, []);
+
+  // Save clients data to localStorage whenever clientsData changes
+  useEffect(() => {
+    if (!isDataLoading) {
+      localStorage.setItem('clientsData', JSON.stringify(clientsData));
+    }
+  }, [clientsData, isDataLoading]);
 
   useEffect(() => {
     if (initialSearchTerm && searchInputRef.current) {
