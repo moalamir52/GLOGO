@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { clients as defaultClients } from '../data';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { getClientWashType, getClientWashTypeForDay, getWashTypeForClient, calculateWeeksSinceStart, getClientWashPattern } from '../utils/washTypeCalculator';
+import InvoiceGenerator from '../components/InvoiceGenerator';
 
 const tableStyles = {
   width: '100%',
@@ -93,89 +95,7 @@ const excelDateToFormattedDate = (excelDate) => {
   return String(excelDate || '');
 };
 
-const calculateWeeksSinceStart = (startDateStr) => {
-  if (!startDateStr) return 0;
-  
-  let startDate;
-  if (startDateStr.includes('-')) {
-    // Handle DD-MMM-YYYY format (e.g., "15-Jan-2024")
-    const [day, month, year] = startDateStr.split('-');
-    const monthMap = {
-      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-    };
-    startDate = new Date(parseInt(year), monthMap[month], parseInt(day));
-  } else {
-    startDate = new Date(startDateStr);
-  }
-  
-  const today = new Date();
-  const diffTime = today - startDate;
-  const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
-  return Math.max(0, diffWeeks);
-};
 
-const getWashTypeForWeek = (washPackage, weekNumber, clientDays) => {
-  if (!washPackage || !clientDays) return '';
-  
-  // Smart parsing for various formats like "3 Ext 1 Bi week", "2 EXT 1 INT week", etc.
-  const packageStr = washPackage.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-  
-  // Extract numbers and keywords
-  const numbers = packageStr.match(/\d+/g) || [];
-  const hasExt = /ext/i.test(packageStr);
-  const hasInt = /int/i.test(packageStr);
-  const isBiWeekly = /bi/i.test(packageStr);
-  
-  let extCount = 0;
-  let intCount = 0;
-  
-  if (numbers.length >= 2 && hasExt && hasInt) {
-    // Format like "3 Ext 1 Int" or "2 EXT 1 INT"
-    extCount = parseInt(numbers[0]);
-    intCount = parseInt(numbers[1]);
-  } else if (numbers.length >= 1 && hasExt && !hasInt) {
-    // Format like "3 Ext" (assume 0 INT)
-    extCount = parseInt(numbers[0]);
-    intCount = 0;
-  } else if (numbers.length >= 1 && hasInt && !hasExt) {
-    // Format like "2 Int" (assume 0 EXT)
-    extCount = 0;
-    intCount = parseInt(numbers[0]);
-  } else {
-    return ''; // Can't parse
-  }
-  const totalRatio = extCount + intCount;
-  
-  if (totalRatio === 0) return '';
-  
-  // Count days per week
-  let daysPerWeek = 0;
-  if (clientDays.toLowerCase() === 'daily') {
-    daysPerWeek = 7;
-  } else if (clientDays.toLowerCase() === 'weekends') {
-    daysPerWeek = 2;
-  } else {
-    const dayParts = clientDays.split('-').filter(d => d.trim());
-    daysPerWeek = dayParts.length;
-  }
-  
-  if (daysPerWeek === 0) return '';
-  
-  // For bi-weekly: cycle period is doubled
-  const adjustedWeek = isBiWeekly ? Math.floor(weekNumber / 2) : weekNumber;
-  
-  // If multiple washes per week, distribute based on ratio
-  if (daysPerWeek >= totalRatio) {
-    const washIndex = adjustedWeek % daysPerWeek;
-    const extDays = Math.round((extCount / totalRatio) * daysPerWeek);
-    return washIndex < extDays ? '🚗 EXT' : '🧽 INT';
-  } else {
-    // If fewer washes than ratio, cycle through weeks
-    const positionInCycle = adjustedWeek % totalRatio;
-    return positionInCycle < extCount ? '🚗 EXT' : '🧽 INT';
-  }
-};
 
 const isValidDays = (daysString) => {
   if (typeof daysString !== 'string' || !daysString.trim()) {
@@ -202,7 +122,7 @@ const isValidDays = (daysString) => {
 
 const googleSheetUrl = 'https://docs.google.com/spreadsheets/d/1sG0itNKcxg10mOzbuiY_i-IsPBQ3fmXwXDvqCbT3kFU/export?format=csv&gid=0';
 
-function ClientsPage({ initialSearchTerm = '' }) {
+function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, navigateToReport }) {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const searchInputRef = useRef(null);
   const [clientsData, setClientsData] = useState(() => {
@@ -212,6 +132,7 @@ function ClientsPage({ initialSearchTerm = '' }) {
   const [isLoading, setIsLoading] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);
   const [showComparison, setShowComparison] = useState(false);
+  const [selectedClientForInvoice, setSelectedClientForInvoice] = useState(null);
 
   useEffect(() => {
     localStorage.setItem('clientsData', JSON.stringify(clientsData));
@@ -254,13 +175,10 @@ function ClientsPage({ initialSearchTerm = '' }) {
         payment: String(row.payment || ''),
         washmanPackage: String(row['Washman Package'] || ''),
         status: String(row.Status || ''),
+        notes: String(row.Notes || ''),
       }));
 
-      importedClients.forEach(client => {
-        if (!isValidDays(client.days)) {
-          console.warn(`Validation Warning: Client "${client.name}" (ID: ${client.id}) has an invalid "Days" value: "${client.days}"`);
-        }
-      });
+
 
       setClientsData(importedClients);
       alert('Clients data imported successfully!');
@@ -306,6 +224,12 @@ function ClientsPage({ initialSearchTerm = '' }) {
 
   const normalizeVilla = (villa) => {
     return villa.replace(/\s+/g, ' ').trim();
+  };
+
+  const handleVillaClick = (villaName) => {
+    if (navigateToScheduleWithSearch) {
+      navigateToScheduleWithSearch(villaName);
+    }
   };
 
   const compareWithSchedule = () => {
@@ -359,7 +283,6 @@ function ClientsPage({ initialSearchTerm = '' }) {
   };
 
   const autoFillSchedule = () => {
-    // Get active clients only
     const activeClients = clientsData.filter(client => 
       client.status && client.status.toLowerCase() === 'active' &&
       client.villa && client.time && client.days
@@ -370,13 +293,12 @@ function ClientsPage({ initialSearchTerm = '' }) {
       return;
     }
 
-    // Get existing appointments
     const existingAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
     const newAppointments = [...existingAppointments];
     
-    // Available workers with balanced assignment
     const workers = ['Raqib', 'Rahman'];
     const workerAssignments = { 'Raqib': 0, 'Rahman': 0 };
+    const workerIntAssignments = { 'Raqib': 0, 'Rahman': 0 };
     const dailyWorkerAssignments = {
       'Monday': { 'Raqib': 0, 'Rahman': 0 },
       'Tuesday': { 'Raqib': 0, 'Rahman': 0 },
@@ -387,6 +309,26 @@ function ClientsPage({ initialSearchTerm = '' }) {
       'Sunday': { 'Raqib': 0, 'Rahman': 0 }
     };
     const conflicts = [];
+    const ignoredAppointments = [];
+    
+    // Helper function to check if appointment will be INT
+    const willBeInternal = (client, day) => {
+      let washPackage = client.washmanPackage;
+      if (!washPackage && client.worker) {
+        const workerText = client.worker.toLowerCase();
+        if (workerText.includes('ext') || workerText.includes('int')) {
+          washPackage = client.worker;
+        }
+      }
+      if (!washPackage) return false;
+      
+      const packageStr = washPackage.toLowerCase();
+      if (packageStr.includes('int')) {
+        // Simple check - if it's a pattern with INT, it might be internal
+        return packageStr.includes('2 ext 1 int') || packageStr.includes('3 ext 1 int');
+      }
+      return false;
+    };
     
     // Process each active client
     activeClients.forEach(client => {
@@ -407,22 +349,41 @@ function ClientsPage({ initialSearchTerm = '' }) {
 
       }
 
-      // Parse client times
-      const clientTimes = [];
-      if (client.time.includes('&')) {
-        const times = client.time.split('&').map(t => t.trim());
-        times.forEach(time => {
-          const normalizedTime = normalizeTime(time);
-          if (normalizedTime) clientTimes.push(normalizedTime);
-        });
-      } else {
-        const normalizedTime = normalizeTime(client.time);
-        if (normalizedTime) clientTimes.push(normalizedTime);
-      }
+      // Parse client times with Notes override
+      const getTimeForDay = (day) => {
+        if (client.notes) {
+          const dayMap = {
+            'Monday': ['mon', 'monday'],
+            'Tuesday': ['tue', 'tuesday'], 
+            'Wednesday': ['wed', 'wednesday'],
+            'Thursday': ['thu', 'thursday'],
+            'Friday': ['fri', 'friday'],
+            'Saturday': ['sat', 'saturday'],
+            'Sunday': ['sun', 'sunday']
+          };
+          
+          const dayAliases = dayMap[day] || [];
+          for (const alias of dayAliases) {
+            const regex = new RegExp(`${alias}\\s+at\\s+(\\d{1,2}:\\d{2}\\s*(?:AM|PM|am|pm)?)`, 'i');
+            const match = client.notes.match(regex);
+            if (match) {
+              return normalizeTime(match[1]);
+            }
+          }
+        }
+        
+        // Fallback to regular time
+        if (client.time.includes('&')) {
+          const times = client.time.split('&').map(t => t.trim());
+          return normalizeTime(times[0]); // Use first time as default
+        }
+        return normalizeTime(client.time);
+      };
 
-      // Create appointments for each day and time combination
+      // Create appointments for each day with specific time
       clientDays.forEach(day => {
-        clientTimes.forEach(time => {
+        const time = getTimeForDay(day);
+        if (time) {
           // Check if appointment already exists for this villa/day/time
           const existingAppt = newAppointments.find(appt => 
             normalizeVilla(appt.villa) === normalizeVilla(client.villa) &&
@@ -431,19 +392,24 @@ function ClientsPage({ initialSearchTerm = '' }) {
           );
 
           if (!existingAppt) {
-            // Check for worker conflicts at this day/time
             const conflictingAppts = newAppointments.filter(appt => 
               appt.day === day && appt.time === time
             );
             
-            // Find available worker (not busy at this time)
             let assignedWorker;
             const busyWorkers = conflictingAppts.map(appt => appt.worker);
             const availableWorkers = workers.filter(worker => !busyWorkers.includes(worker));
             
+            const isInternal = willBeInternal(client, day);
+            
             if (availableWorkers.length > 0) {
-              // Choose worker with fewer assignments for this day, then overall balance
               assignedWorker = availableWorkers.reduce((prev, curr) => {
+                if (isInternal) {
+                  if (workerIntAssignments[prev] !== workerIntAssignments[curr]) {
+                    return workerIntAssignments[prev] < workerIntAssignments[curr] ? prev : curr;
+                  }
+                }
+                
                 const prevDayCount = dailyWorkerAssignments[day][prev];
                 const currDayCount = dailyWorkerAssignments[day][curr];
                 if (prevDayCount !== currDayCount) {
@@ -451,9 +417,14 @@ function ClientsPage({ initialSearchTerm = '' }) {
                 }
                 return workerAssignments[prev] <= workerAssignments[curr] ? prev : curr;
               });
-            } else {
-              // All workers busy, choose one with fewer assignments for this day
+            } else if (conflictingAppts.length < workers.length) {
               assignedWorker = workers.reduce((prev, curr) => {
+                if (isInternal) {
+                  if (workerIntAssignments[prev] !== workerIntAssignments[curr]) {
+                    return workerIntAssignments[prev] < workerIntAssignments[curr] ? prev : curr;
+                  }
+                }
+                
                 const prevDayCount = dailyWorkerAssignments[day][prev];
                 const currDayCount = dailyWorkerAssignments[day][curr];
                 if (prevDayCount !== currDayCount) {
@@ -462,19 +433,27 @@ function ClientsPage({ initialSearchTerm = '' }) {
                 return workerAssignments[prev] <= workerAssignments[curr] ? prev : curr;
               });
               conflicts.push({
+                day: day,
+                time: time,
+                workers: conflictingAppts.map(appt => appt.worker).concat([assignedWorker])
+              });
+            } else {
+              ignoredAppointments.push({
+                clientName: client.name,
                 villa: client.villa,
                 day: day,
                 time: time,
-                worker: assignedWorker,
-                message: `⚠️ Worker conflict: ${assignedWorker} already busy at ${time} on ${day}`
+                reason: 'No workers available at this time'
               });
+              return;
             }
             
-            // Track assignment for balance
             workerAssignments[assignedWorker]++;
             dailyWorkerAssignments[day][assignedWorker]++;
+            if (isInternal) {
+              workerIntAssignments[assignedWorker]++;
+            }
 
-            // Create new appointment
             const newAppointment = {
               id: `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               villa: client.villa,
@@ -485,25 +464,216 @@ function ClientsPage({ initialSearchTerm = '' }) {
 
             newAppointments.push(newAppointment);
           }
-        });
+        }
       });
     });
 
-    // Save updated appointments
-    localStorage.setItem('appointments', JSON.stringify(newAppointments));
+    // Balance Internal/External workload between workers
+    const balanceWorkload = (appointments) => {
+      const clientsData = JSON.parse(localStorage.getItem('clientsData') || '[]');
+      
+      // Get INT/EXT counts for each worker
+      const workerStats = {};
+      workers.forEach(worker => {
+        workerStats[worker] = { int: [], ext: [], total: 0 };
+      });
+      
+      appointments.forEach(appt => {
+        if (!appt.worker || !workerStats[appt.worker]) return;
+        
+        const client = clientsData.find(c => 
+          c.villa && appt.villa && 
+          c.villa.replace(/\s+/g, ' ').trim().toLowerCase() === appt.villa.replace(/\s+/g, ' ').trim().toLowerCase()
+        );
+        
+        if (client) {
+          let washPackage = client.washmanPackage;
+          if (!washPackage && client.worker) {
+            const workerText = client.worker.toLowerCase();
+            if (workerText.includes('ext') || workerText.includes('int')) {
+              washPackage = client.worker;
+            }
+          }
+          
+          if (washPackage && washPackage.toLowerCase().includes('int')) {
+            // This is likely an INT appointment
+            let dayPosition = 0;
+            if (client.days.toLowerCase() === 'daily') {
+              const dayMap = { 'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6 };
+              dayPosition = dayMap[appt.day] || 0;
+            } else {
+              const dayMap = { 'mon': 'Monday', 'tue': 'Tuesday', 'wed': 'Wednesday', 'thu': 'Thursday', 'thurs': 'Thursday', 'fri': 'Friday', 'sat': 'Saturday', 'sun': 'Sunday' };
+              const clientDaysList = client.days.toLowerCase().split('-').map(d => dayMap[d.trim()]).filter(Boolean);
+              dayPosition = clientDaysList.indexOf(appt.day);
+              if (dayPosition === -1) dayPosition = 0;
+            }
+            
+            const packageStr = washPackage.toLowerCase();
+            let isInternal = false;
+            
+            if (packageStr.includes('2 ext 1 int week')) {
+              isInternal = dayPosition === 1;
+            } else if (packageStr.includes('3 ext 1 int week')) {
+              isInternal = dayPosition === 1;
+            }
+            
+            if (isInternal) {
+              workerStats[appt.worker].int.push(appt);
+            } else {
+              workerStats[appt.worker].ext.push(appt);
+            }
+          } else {
+            workerStats[appt.worker].ext.push(appt);
+          }
+        } else {
+          workerStats[appt.worker].ext.push(appt);
+        }
+        
+        workerStats[appt.worker].total++;
+      });
+      
+      // Find imbalance and swap appointments
+      const workerNames = Object.keys(workerStats);
+      if (workerNames.length === 2) {
+        const [worker1, worker2] = workerNames;
+        const stats1 = workerStats[worker1];
+        const stats2 = workerStats[worker2];
+        
+        const intDiff = stats1.int.length - stats2.int.length;
+        
+        // If difference is > 1, try to balance
+        if (Math.abs(intDiff) > 1) {
+          const swapsNeeded = Math.floor(Math.abs(intDiff) / 2);
+          
+          if (intDiff > 0) {
+            // worker1 has more INT, worker2 has more EXT
+            // Swap INT from worker1 with EXT from worker2
+            for (let i = 0; i < swapsNeeded && i < stats1.int.length && i < stats2.ext.length; i++) {
+              const intAppt = stats1.int[i];
+              const extAppt = stats2.ext[i];
+              
+              // Check if they're not at the same time (to avoid conflicts)
+              const conflict = appointments.some(appt => 
+                appt.id !== intAppt.id && appt.id !== extAppt.id &&
+                appt.day === intAppt.day && appt.time === intAppt.time && appt.worker === worker2
+              ) || appointments.some(appt => 
+                appt.id !== intAppt.id && appt.id !== extAppt.id &&
+                appt.day === extAppt.day && appt.time === extAppt.time && appt.worker === worker1
+              );
+              
+              if (!conflict) {
+                // Swap workers
+                const intIndex = appointments.findIndex(appt => appt.id === intAppt.id);
+                const extIndex = appointments.findIndex(appt => appt.id === extAppt.id);
+                
+                if (intIndex !== -1 && extIndex !== -1) {
+                  appointments[intIndex].worker = worker2;
+                  appointments[extIndex].worker = worker1;
+                }
+              }
+            }
+          } else {
+            // worker2 has more INT, worker1 has more EXT
+            for (let i = 0; i < swapsNeeded && i < stats2.int.length && i < stats1.ext.length; i++) {
+              const intAppt = stats2.int[i];
+              const extAppt = stats1.ext[i];
+              
+              const conflict = appointments.some(appt => 
+                appt.id !== intAppt.id && appt.id !== extAppt.id &&
+                appt.day === intAppt.day && appt.time === intAppt.time && appt.worker === worker1
+              ) || appointments.some(appt => 
+                appt.id !== intAppt.id && appt.id !== extAppt.id &&
+                appt.day === extAppt.day && appt.time === extAppt.time && appt.worker === worker2
+              );
+              
+              if (!conflict) {
+                const intIndex = appointments.findIndex(appt => appt.id === intAppt.id);
+                const extIndex = appointments.findIndex(appt => appt.id === extAppt.id);
+                
+                if (intIndex !== -1 && extIndex !== -1) {
+                  appointments[intIndex].worker = worker1;
+                  appointments[extIndex].worker = worker2;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      return appointments;
+    };
     
-    // Calculate statistics
-    const addedCount = newAppointments.length - existingAppointments.length;
+    // Apply workload balancing
+    const balancedAppointments = balanceWorkload(newAppointments);
+    
+    localStorage.setItem('appointments', JSON.stringify(balancedAppointments));
+    
+    const addedCount = balancedAppointments.length - existingAppointments.length;
     const workerCounts = {};
     workers.forEach(worker => {
-      workerCounts[worker] = newAppointments.filter(appt => appt.worker === worker).length;
+      workerCounts[worker] = balancedAppointments.filter(appt => appt.worker === worker).length;
+    });
+    
+    // Calculate final INT/EXT distribution
+    const finalWorkerStats = {};
+    workers.forEach(worker => {
+      finalWorkerStats[worker] = { int: 0, ext: 0, total: 0 };
+    });
+    
+    const clientsData2 = JSON.parse(localStorage.getItem('clientsData') || '[]');
+    balancedAppointments.forEach(appt => {
+      if (!appt.worker || !finalWorkerStats[appt.worker]) return;
+      
+      const client = clientsData2.find(c => 
+        c.villa && appt.villa && 
+        c.villa.replace(/\s+/g, ' ').trim().toLowerCase() === appt.villa.replace(/\s+/g, ' ').trim().toLowerCase()
+      );
+      
+      let isInternal = false;
+      if (client) {
+        let washPackage = client.washmanPackage;
+        if (!washPackage && client.worker) {
+          const workerText = client.worker.toLowerCase();
+          if (workerText.includes('ext') || workerText.includes('int')) {
+            washPackage = client.worker;
+          }
+        }
+        
+        if (washPackage && washPackage.toLowerCase().includes('int')) {
+          let dayPosition = 0;
+          if (client.days.toLowerCase() === 'daily') {
+            const dayMap = { 'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6 };
+            dayPosition = dayMap[appt.day] || 0;
+          } else {
+            const dayMap = { 'mon': 'Monday', 'tue': 'Tuesday', 'wed': 'Wednesday', 'thu': 'Thursday', 'thurs': 'Thursday', 'fri': 'Friday', 'sat': 'Saturday', 'sun': 'Sunday' };
+            const clientDaysList = client.days.toLowerCase().split('-').map(d => dayMap[d.trim()]).filter(Boolean);
+            dayPosition = clientDaysList.indexOf(appt.day);
+            if (dayPosition === -1) dayPosition = 0;
+          }
+          
+          const packageStr = washPackage.toLowerCase();
+          if (packageStr.includes('2 ext 1 int week')) {
+            isInternal = dayPosition === 1;
+          } else if (packageStr.includes('3 ext 1 int week')) {
+            isInternal = dayPosition === 1;
+          }
+        }
+      }
+      
+      if (isInternal) {
+        finalWorkerStats[appt.worker].int++;
+      } else {
+        finalWorkerStats[appt.worker].ext++;
+      }
+      finalWorkerStats[appt.worker].total++;
     });
     
     // Show balance information
     const totalAssignments = Object.values(workerCounts).reduce((sum, count) => sum + count, 0);
     const balanceInfo = workers.map(worker => {
       const percentage = totalAssignments > 0 ? ((workerCounts[worker] / totalAssignments) * 100).toFixed(1) : 0;
-      return `   ${worker}: ${workerCounts[worker]} appointments (${percentage}%)`;
+      const intCount = workerIntAssignments[worker] || 0;
+      return `   ${worker}: ${workerCounts[worker]} total (${percentage}%) - ${intCount} INT assignments`;
     }).join('\n');
     
     // Show daily distribution
@@ -513,23 +683,30 @@ function ClientsPage({ initialSearchTerm = '' }) {
       return `   ${day}: Raqib(${dailyWorkerAssignments[day]['Raqib']}) Rahman(${dailyWorkerAssignments[day]['Rahman']})`;
     }).filter(Boolean).join('\n');
 
-    let statsMessage = `Schedule Auto-Fill Complete!\n\n` +
-      `✅ Added: ${addedCount} new appointments\n` +
-      `📊 Total appointments: ${newAppointments.length}\n` +
-      `👷 Overall Worker Distribution:\n` +
-      balanceInfo +
-      (dailyDistribution ? `\n\n📅 Daily Distribution:\n${dailyDistribution}` : '');
+    let statsMessage = `📋 Auto-Fill Schedule Completed\n` +
+      `${'='.repeat(30)}\n\n` +
+      `• Added: ${addedCount} new appointments\n` +
+      `• Total appointments: ${newAppointments.length}\n`;
     
-    if (conflicts.length > 0) {
-      statsMessage += `\n\n⚠️ CONFLICTS DETECTED (${conflicts.length}):\n` +
-        conflicts.map(conflict => 
-          `• ${conflict.villa} - ${conflict.day} ${conflict.time} (${conflict.worker})`
-        ).join('\n') +
-        `\n\n🚨 Some workers are assigned to multiple locations at the same time!`;
+    if (ignoredAppointments.length > 0) {
+      statsMessage += `• Ignored appointments: ${ignoredAppointments.length}\n`;
     }
     
-    statsMessage += `\n\n🔄 Please refresh the Schedule page to see changes.`;
-
+    if (conflicts.length > 0) {
+      statsMessage += `• Conflicts: ${conflicts.length}\n`;
+    }
+    
+    statsMessage += `\n✅ Data saved successfully!`;
+    
+    // Save report data for separate viewing
+    const reportData = {
+      totalScheduled: addedCount,
+      ignoredAppointments,
+      conflicts,
+      workerStats: finalWorkerStats
+    };
+    localStorage.setItem('lastReportData', JSON.stringify(reportData));
+    
     alert(statsMessage);
   };
 
@@ -566,12 +743,12 @@ function ClientsPage({ initialSearchTerm = '' }) {
             payment: String(row.payment || ''),
             washmanPackage: String(row['Washman Package'] || ''),
             status: String(row.Status || ''),
+            notes: String(row.Notes || ''),
           };
         });
       
       setClientsData(importedClients);
     } catch (error) {
-      console.error('Error fetching Google Sheet data:', error);
       alert('Error updating data from Google Sheets');
     } finally {
       setIsLoading(false);
@@ -722,6 +899,13 @@ function ClientsPage({ initialSearchTerm = '' }) {
   }
 
   return (
+    <>
+      {selectedClientForInvoice && (
+        <InvoiceGenerator 
+          clientData={selectedClientForInvoice}
+          onClose={() => setSelectedClientForInvoice(null)}
+        />
+      )}
     <div style={containerStyles}>
       <div style={cardStyles}>
         <h1 style={{
@@ -793,6 +977,28 @@ function ClientsPage({ initialSearchTerm = '' }) {
           >
             ✨ Auto Fill Schedule
           </button>
+          
+          <button
+            onClick={() => {
+              const savedReportData = localStorage.getItem('lastReportData');
+              if (savedReportData && navigateToReport) {
+                navigateToReport(JSON.parse(savedReportData));
+              } else {
+                alert('لا يوجد تقرير متاح. يرجى تشغيل الجدولة التلقائية أولاً.');
+              }
+            }}
+            style={{
+              ...buttonBaseStyles,
+              background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+              color: 'white',
+              boxShadow: '0 6px 20px rgba(23, 162, 184, 0.3)',
+              border: '2px solid transparent'
+            }}
+          >
+            📊 View Report
+          </button>
+          
+
         </div>
 
         <div style={{ position: 'relative', maxWidth: '400px', marginBottom: '2rem' }}>
@@ -855,30 +1061,41 @@ function ClientsPage({ initialSearchTerm = '' }) {
                 <th style={thStyles}>Type of Car</th>
                 <th style={thStyles}>Days</th>
                 <th style={thStyles}>Time</th>
-                <th style={thStyles}>Worker</th>
+
                 <th style={thStyles}>Fee</th>
                 <th style={thStyles}>Start Date</th>
                 <th style={thStyles}>Payment</th>
                 <th style={thStyles}>Washman Package</th>
+                <th style={thStyles}>Notes</th>
                 <th style={thStyles}>Current Wash</th>
                 <th style={thStyles}>Status</th>
+                <th style={thStyles}>Actions</th>
               </tr>
             </thead>
             <tbody>
               {filteredClients.map((client, index) => (
                 <tr key={client.id} style={index % 2 === 0 ? { ...trStyles, ...evenTrStyles } : trStyles}>
                   <td style={tdStyles}>{client.name}</td>
-                  <td style={tdStyles}>{client.villa}</td>
+                  <td style={{
+                    ...tdStyles,
+                    cursor: 'pointer',
+                    color: '#548235',
+                    fontWeight: '600',
+                    textDecoration: 'underline'
+                  }} onClick={() => handleVillaClick(client.villa)}>
+                    {client.villa}
+                  </td>
                   <td style={tdStyles}>{client.phone}</td>
                   <td style={tdStyles}>{client.numCars}</td>
                   <td style={tdStyles}>{client.carType}</td>
                   <td style={tdStyles}>{client.days}</td>
                   <td style={tdStyles}>{client.time}</td>
-                  <td style={tdStyles}>{client.worker}</td>
+
                   <td style={tdStyles}>{client.fee}</td>
                   <td style={tdStyles}>{client.startDate}</td>
                   <td style={tdStyles}>{client.payment}</td>
                   <td style={tdStyles}>{client.washmanPackage}</td>
+                  <td style={tdStyles}>{client.notes}</td>
                   <td style={tdStyles}>
                     {(() => {
                       if (!client.startDate || !client.days) {
@@ -920,18 +1137,50 @@ function ClientsPage({ initialSearchTerm = '' }) {
                         );
                       }
                       
-                      const washType = getWashTypeForWeek(washPackage, calculateWeeksSinceStart(client.startDate), client.days);
+                      // عرض نمط الغسيل
+                      const washPattern = getClientWashPattern(client);
+                      
+                      if (washPattern) {
+                        return (
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            backgroundColor: '#17a2b8',
+                            color: 'white'
+                          }}>
+                            {washPattern}
+                          </span>
+                        );
+                      }
+                      
+                      // إذا مافيش باكج بس في بيانات أخرى
+                      if (client.washmanPackage || (client.worker && (client.worker.toLowerCase().includes('ext') || client.worker.toLowerCase().includes('int')))) {
+                        return (
+                          <span style={{
+                            padding: '4px 8px',
+                            borderRadius: '12px',
+                            fontSize: '0.7rem',
+                            fontWeight: '500',
+                            backgroundColor: '#ffc107',
+                            color: 'black'
+                          }}>
+                            {client.washmanPackage || client.worker}
+                          </span>
+                        );
+                      }
                       
                       return (
                         <span style={{
                           padding: '4px 8px',
                           borderRadius: '12px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          backgroundColor: washType.includes('EXT') ? '#007bff' : '#28a745',
+                          fontSize: '0.7rem',
+                          fontWeight: '500',
+                          backgroundColor: '#6c757d',
                           color: 'white'
                         }}>
-                          {washType || 'N/A'}
+                          ❓ No Package
                         </span>
                       );
                     })()}
@@ -948,6 +1197,25 @@ function ClientsPage({ initialSearchTerm = '' }) {
                       {client.status || 'Not Active'}
                     </span>
                   </td>
+                  <td style={tdStyles}>
+                    <button
+                      onClick={() => setSelectedClientForInvoice(client)}
+                      style={{
+                        background: 'linear-gradient(135deg, #548235 0%, #6a9c3d 100%)',
+                        color: 'white',
+                        padding: '6px 12px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        fontSize: '0.8rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.3s ease',
+                        boxShadow: '0 2px 8px rgba(84, 130, 53, 0.3)'
+                      }}
+                    >
+                      📄 Invoice
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -961,6 +1229,7 @@ function ClientsPage({ initialSearchTerm = '' }) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
