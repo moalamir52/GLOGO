@@ -5,6 +5,8 @@ import { saveAs } from 'file-saver';
 import { daysOfWeek, workers as initialWorkers } from '../data'; // Using data from central file
 import WorkerAppointmentsModal from '../components/WorkerAppointmentsModal'; // Import the new modal
 import UniqueVillasModal from '../components/UniqueVillasModal'; // Import the new UniqueVillasModal
+import { getClientWashType } from '../utils/washTypeCalculator';
+import { saveAppointments, loadAppointments } from '../services/database';
 
 // --- SVG Icons ---
 const VillaIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 20V14H14V20H19V12H22L12 3L2 12H5V20H10Z" fill="currentColor"/></svg>;
@@ -18,121 +20,18 @@ const NO_WORKER_SELECTED = 'none';
 const workers = initialWorkers;
 const timeSlots = Array.from({ length: 14 }, (_, i) => {
   const hour = 6 + i;
-  return `${hour < 10 ? '0' : ''}${hour}:00`;
+  return `${hour.toString().padStart(2, '0')}:00`;
+}).sort((a, b) => {
+  const [hourA] = a.split(':').map(Number);
+  const [hourB] = b.split(':').map(Number);
+  return hourA - hourB;
 });
 
 const isValidTime = (time) => {
   return timeSlots.includes(time);
 };
 
-// --- Wash Type Calculation Functions ---
-const calculateWeeksSinceStart = (startDateStr) => {
-  if (!startDateStr) return 0;
-  
-  let startDate;
-  if (startDateStr.includes('-')) {
-    const [day, month, year] = startDateStr.split('-');
-    const monthMap = {
-      'Jan': 0, 'Feb': 1, 'Mar': 2, 'Apr': 3, 'May': 4, 'Jun': 5,
-      'Jul': 6, 'Aug': 7, 'Sep': 8, 'Oct': 9, 'Nov': 10, 'Dec': 11
-    };
-    startDate = new Date(parseInt(year), monthMap[month], parseInt(day));
-  } else {
-    startDate = new Date(startDateStr);
-  }
-  
-  const today = new Date();
-  const diffTime = today - startDate;
-  const diffWeeks = Math.floor(diffTime / (1000 * 60 * 60 * 24 * 7));
-  return Math.max(0, diffWeeks);
-};
 
-const getWashTypeForWeek = (washPackage, weekNumber, clientDays) => {
-  if (!washPackage || !clientDays) return '';
-  
-  // Smart parsing for various formats like "3 Ext 1 Bi week", "2 EXT 1 INT week", etc.
-  const packageStr = washPackage.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
-  
-  // Extract numbers and keywords
-  const numbers = packageStr.match(/\d+/g) || [];
-  const hasExt = /ext/i.test(packageStr);
-  const hasInt = /int/i.test(packageStr);
-  const isBiWeekly = /bi/i.test(packageStr);
-  
-  let extCount = 0;
-  let intCount = 0;
-  
-  if (numbers.length >= 2 && hasExt && hasInt) {
-    // Format like "3 Ext 1 Int" or "2 EXT 1 INT"
-    extCount = parseInt(numbers[0]);
-    intCount = parseInt(numbers[1]);
-  } else if (numbers.length >= 1 && hasExt && !hasInt) {
-    // Format like "3 Ext" (assume 0 INT)
-    extCount = parseInt(numbers[0]);
-    intCount = 0;
-  } else if (numbers.length >= 1 && hasInt && !hasExt) {
-    // Format like "2 Int" (assume 0 EXT)
-    extCount = 0;
-    intCount = parseInt(numbers[0]);
-  } else {
-    return ''; // Can't parse
-  }
-  const totalRatio = extCount + intCount;
-  
-  if (totalRatio === 0) return '';
-  
-  let daysPerWeek = 0;
-  if (clientDays.toLowerCase() === 'daily') {
-    daysPerWeek = 7;
-  } else if (clientDays.toLowerCase() === 'weekends') {
-    daysPerWeek = 2;
-  } else {
-    const dayParts = clientDays.split('-').filter(d => d.trim());
-    daysPerWeek = dayParts.length;
-  }
-  
-  if (daysPerWeek === 0) return '';
-  
-  const adjustedWeek = isBiWeekly ? Math.floor(weekNumber / 2) : weekNumber;
-  
-  if (daysPerWeek >= totalRatio) {
-    const washIndex = adjustedWeek % daysPerWeek;
-    const extDays = Math.round((extCount / totalRatio) * daysPerWeek);
-    return washIndex < extDays ? '🚗 EXT' : '🧽 INT';
-  } else {
-    const positionInCycle = adjustedWeek % totalRatio;
-    return positionInCycle < extCount ? '🚗 EXT' : '🧽 INT';
-  }
-};
-
-const getClientWashType = (villaName) => {
-  const clientsData = JSON.parse(localStorage.getItem('clientsData') || '[]');
-  const client = clientsData.find(c => 
-    c.villa && villaName && 
-    c.villa.replace(/\s+/g, ' ').trim().toLowerCase() === villaName.replace(/\s+/g, ' ').trim().toLowerCase()
-  );
-  
-  if (!client || !client.startDate || !client.days) {
-    return '';
-  }
-  
-  // Check for wash package in washmanPackage field first, then in worker field
-  let washPackage = client.washmanPackage;
-  if (!washPackage && client.worker) {
-    // Extract package info from worker field (e.g., "Raqib 2 Ext 1 INT bi week")
-    const workerText = client.worker.toLowerCase();
-    if (workerText.includes('ext') || workerText.includes('int')) {
-      washPackage = client.worker;
-    }
-  }
-  
-  if (!washPackage) {
-    return '';
-  }
-  
-  const weeksSinceStart = calculateWeeksSinceStart(client.startDate);
-  return getWashTypeForWeek(washPackage, weeksSinceStart, client.days);
-};
 
 // --- Edit Modal Component ---
 function EditModal({ appointment, onSave, onDelete, onClose, showAlert }) { // Added showAlert prop
@@ -184,6 +83,11 @@ function EditModal({ appointment, onSave, onDelete, onClose, showAlert }) { // A
             <option value={NO_WORKER_SELECTED}>None</option>
             {modalData.secondaryWorker && modalData.secondaryWorker !== NO_WORKER_SELECTED && <option key={modalData.secondaryWorker} value={modalData.secondaryWorker}>{modalData.secondaryWorker}</option>}
             {filteredSecondaryWorkers.map(worker => <option key={worker} value={worker}>{worker}</option>)}
+          </select>
+          <label>Wash Type:</label>
+          <select name="washType" value={modalData.washType || 'EXT'} onChange={handleChange}>
+            <option value="EXT">🚗 EXT</option>
+            <option value="INT">🏠 INT</option>
           </select>
           <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'center', marginTop: '1rem' }}>
             <button type="submit" style={{
@@ -486,16 +390,14 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
 }
 
 // --- Main SchedulePage Component ---
-function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
-  const [appointments, setAppointments] = useState(() => {
-    const savedAppointments = localStorage.getItem('appointments');
-    return savedAppointments ? JSON.parse(savedAppointments) : initialAppointments;
-  });
+function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) { // Receive the new props
+  const [appointments, setAppointments] = useState(initialAppointments);
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({ villa: '', day: ['Saturday'], time: '06:00', worker: 'Raqib', secondaryWorker: NO_WORKER_SELECTED });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [selectedWorkerForView, setSelectedWorkerForView] = useState(null); // New state for viewing worker appointments
   const [isWorkerAppointmentsModalOpen, setIsWorkerAppointmentsModalOpen] = useState(false); // New state for worker appointments modal
   const [isUniqueVillasModalOpen, setIsUniqueVillasModalOpen] = useState(false); // New state for unique villas modal
@@ -543,8 +445,27 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
   };
 
   useEffect(() => {
-    localStorage.setItem('appointments', JSON.stringify(appointments));
-  }, [appointments]);
+    setSearchTerm(initialSearchTerm);
+  }, [initialSearchTerm]);
+
+  // Load appointments from Firebase on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      setIsLoading(true);
+      const data = await loadAppointments();
+      setAppointments(data);
+      setIsLoading(false);
+    };
+    loadData();
+  }, []);
+
+  // Save appointments to Firebase whenever appointments change
+  useEffect(() => {
+    if (!isLoading && appointments.length >= 0) {
+      saveAppointments(appointments);
+      localStorage.setItem('appointments', JSON.stringify(appointments));
+    }
+  }, [appointments, isLoading]);
 
   const getWorkerCarCounts = () => {
     const counts = {};
@@ -639,29 +560,20 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
       return `${formattedHour}:${minute} ${ampm}`;
     };
 
-    const clientsData = JSON.parse(localStorage.getItem('clientsData') || '[]');
+    // ترتيب المواعيد حسب التوقيت قبل التصدير
+    const sortedAppointments = filteredAppointments.sort((a, b) => {
+      const [hourA] = a.time.split(':').map(Number);
+      const [hourB] = b.time.split(':').map(Number);
+      return hourA - hourB;
+    });
     
-    const data = filteredAppointments.map(appt => {
-      const client = clientsData.find(c => 
-        c.villa && appt.villa && 
-        c.villa.replace(/\s+/g, ' ').trim().toLowerCase() === appt.villa.replace(/\s+/g, ' ').trim().toLowerCase()
-      );
-      
-      let washType = '';
-      if (client && client.startDate && client.days) {
-        // Check for wash package in washmanPackage field first, then in worker field
-        let washPackage = client.washmanPackage;
-        if (!washPackage && client.worker) {
-          const workerText = client.worker.toLowerCase();
-          if (workerText.includes('ext') || workerText.includes('int')) {
-            washPackage = client.worker;
-          }
-        }
-        
-        if (washPackage) {
-          const weeksSinceStart = calculateWeeksSinceStart(client.startDate);
-          washType = getWashTypeForWeek(washPackage, weeksSinceStart, client.days);
-        }
+    const data = sortedAppointments.map(appt => {
+      // استخدام التعديل اليدوي إذا كان موجود، وإلا استخدام الحساب التلقائي
+      let washType;
+      if (appt.manualWashType) {
+        washType = appt.manualWashType === 'EXT' ? '🚗 EXT' : '🧽 INT';
+      } else {
+        washType = getClientWashType(appt.villa, appt.day) || 'N/A';
       }
       
       return {
@@ -669,7 +581,7 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
         Day: appt.day,
         Time: formatTime(appt.time),
         Worker: appt.worker,
-        'Wash Type': washType || 'N/A'
+        'Wash Type': washType
       };
     });
 
@@ -702,7 +614,7 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
         const loadedSettings = JSON.parse(e.target.result);
         if (loadedSettings.appointments) {
           setAppointments(loadedSettings.appointments);
-          showAlert('Schedule loaded successfully!', 'Success');
+
         } else {
           showAlert('Invalid settings file: missing appointments data.', 'Error');
         }
@@ -721,7 +633,7 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
       () => {
         setAppointments([]);
         localStorage.removeItem('appointments');
-        showAlert('Schedule has been reset.', 'Success');
+
       }
     );
   };
@@ -733,7 +645,7 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
       () => {
         localStorage.removeItem('appointments');
         setAppointments(initialAppointments); // Reset to initial empty state
-        showAlert('All saved data has been cleared.', 'Success');
+
       }
     );
   };
@@ -881,7 +793,11 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
       setAppointments(prev => {
         const afterRemoval = prev.filter(appt => !appointmentsToRemove.includes(appt.id));
         const afterAddition = [...afterRemoval, ...appointmentsToAdd];
-        return afterAddition.sort((a, b) => a.time.localeCompare(b.time));
+        return afterAddition.sort((a, b) => {
+          const [hourA] = a.time.split(':').map(Number);
+          const [hourB] = b.time.split(':').map(Number);
+          return hourA - hourB;
+        });
       });
       setFormData(prev => ({ ...prev, villa: '' }));
     } else if (abortAll) {
@@ -903,6 +819,8 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
     const finalUpdatedAppt = {
       ...updatedAppt,
       secondaryWorker: updatedAppt.secondaryWorker === NO_WORKER_SELECTED ? undefined : updatedAppt.secondaryWorker,
+      // حفظ نوع الغسيل المحدد يدوياً
+      manualWashType: updatedAppt.washType
     };
 
     if (finalUpdatedAppt.secondaryWorker && finalUpdatedAppt.worker === finalUpdatedAppt.secondaryWorker) {
@@ -910,7 +828,11 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
       return; // Prevent the update
     }
 
-    setAppointments(prev => prev.map(appt => appt.id === finalUpdatedAppt.id ? finalUpdatedAppt : appt).sort((a, b) => a.time.localeCompare(b.time)));
+    setAppointments(prev => prev.map(appt => appt.id === finalUpdatedAppt.id ? finalUpdatedAppt : appt).sort((a, b) => {
+      const [hourA] = a.time.split(':').map(Number);
+      const [hourB] = b.time.split(':').map(Number);
+      return hourA - hourB;
+    }));
     handleCloseModal();
   };
 
@@ -952,16 +874,34 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
     }
 
     // Check if target slot is occupied
-    const targetSlotOccupied = appointments.some(appt => 
+    const targetSlotOccupied = appointments.find(appt => 
       appt.day === targetDay && 
       appt.time === targetTime && 
       appt.worker === targetWorker
     );
 
     if (targetSlotOccupied) {
-      showAlert(`${targetWorker} is already busy at ${targetTime} on ${targetDay}`, 'Slot Occupied');
-      setDraggedAppointment(null);
-      return;
+      // Allow swapping if both appointments are at the same time
+      if (draggedAppointment.day === targetDay && draggedAppointment.time === targetTime) {
+        // Swap the workers
+        setAppointments(prev => prev.map(appt => {
+          if (appt.id === draggedAppointment.id) {
+            return { ...appt, worker: targetWorker };
+          }
+          if (appt.id === targetSlotOccupied.id) {
+            return { ...appt, worker: draggedAppointment.worker };
+          }
+          return appt;
+        }));
+        
+        setDraggedAppointment(null);
+
+        return;
+      } else {
+        showAlert(`${targetWorker} is already busy at ${targetTime} on ${targetDay}`, 'Slot Occupied');
+        setDraggedAppointment(null);
+        return;
+      }
     }
 
     // Update the appointment with new worker
@@ -972,12 +912,29 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
     ));
 
     setDraggedAppointment(null);
-    showAlert(`Villa ${draggedAppointment.villa} moved to ${targetWorker}`, 'Success');
+
   };
 
   const handleDragEnd = () => {
     setDraggedAppointment(null);
   };
+
+  if (isLoading) {
+    return (
+      <div style={{ 
+        backgroundColor: '#DAF2D0', 
+        borderRadius: '20px', 
+        padding: '2rem', 
+        textAlign: 'center',
+        minHeight: '200px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}>
+        <div style={{ fontSize: '1.5rem', color: '#548235' }}>🔄 Loading schedule...</div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ backgroundColor: '#DAF2D0', borderRadius: '20px', padding: '2rem', boxShadow: '0 8px 32px rgba(0,0,0,0.1)', border: '1px solid rgba(255,255,255,0.2)' }}>
@@ -1033,7 +990,7 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
             letterSpacing: '1px',
             position: 'relative',
             zIndex: 1
-          }}>Weekly Car Wash Schedule</h1>
+          }}>GLOGO car wash Schedule</h1>
         </div>
       </div>
       {/* Worker Car Counts and Client Stats */}
@@ -1342,6 +1299,35 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
             marginRight: '0.5rem',
             marginBottom: '0.5rem'
           }}>🗑️ Clear Storage</button>
+          <button type="button" onClick={() => {
+            const savedAppointments = localStorage.getItem('appointments');
+            if (savedAppointments) {
+              const parsedAppointments = JSON.parse(savedAppointments);
+              const updatedAppointments = parsedAppointments.map(appt => ({
+                ...appt,
+                washType: undefined
+              }));
+              localStorage.setItem('appointments', JSON.stringify(updatedAppointments));
+              setAppointments(updatedAppointments);
+              window.location.reload();
+            }
+          }} style={{
+            padding: '12px 24px',
+            borderRadius: '12px',
+            border: 'none',
+            fontSize: '0.95rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            background: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+            color: 'white',
+            boxShadow: '0 6px 20px rgba(23, 162, 184, 0.3)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginRight: '0.5rem',
+            marginBottom: '0.5rem'
+          }}>🔄 Recalculate Wash Types</button>
         </form>
       </div>
 
@@ -1446,17 +1432,18 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
                           }}
                         >
                           <strong>{primaryAppointment.villa}</strong>
-                          {getClientWashType(primaryAppointment.villa) && (
-                            <div style={{
-                              fontSize: '0.7rem',
-                              fontWeight: '600',
-                              marginTop: '2px',
-                              color: 'white',
-                              textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
-                            }}>
-                              {getClientWashType(primaryAppointment.villa)}
-                            </div>
-                          )}
+                          <div style={{
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            marginTop: '2px',
+                            color: 'white',
+                            textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
+                          }}>
+                            {primaryAppointment.manualWashType ? 
+                              (primaryAppointment.manualWashType === 'EXT' ? '🚗 EXT' : '🧽 INT') : 
+                              (getClientWashType(primaryAppointment.villa, primaryAppointment.day) || '🚗 EXT')
+                            }
+                          </div>
                           <button className="edit-btn" onClick={(e) => { e.stopPropagation(); handleEditClick(primaryAppointment); }}>✏️</button>
                         </div>
                       )}
@@ -1473,17 +1460,18 @@ function SchedulePage({ navigateToClientsWithSearch }) { // Receive the new prop
                           }}
                         >
                           <strong>{secondaryAppointment.villa}</strong>
-                          {getClientWashType(secondaryAppointment.villa) && (
-                            <div style={{
-                              fontSize: '0.7rem',
-                              fontWeight: '600',
-                              marginTop: '2px',
-                              color: 'white',
-                              textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
-                            }}>
-                              {getClientWashType(secondaryAppointment.villa)}
-                            </div>
-                          )}
+                          <div style={{
+                            fontSize: '0.7rem',
+                            fontWeight: '600',
+                            marginTop: '2px',
+                            color: 'white',
+                            textShadow: '1px 1px 2px rgba(0,0,0,0.5)'
+                          }}>
+                            {secondaryAppointment.manualWashType ? 
+                              (secondaryAppointment.manualWashType === 'EXT' ? '🚗 EXT' : '🧽 INT') : 
+                              (getClientWashType(secondaryAppointment.villa, secondaryAppointment.day) || '🚗 EXT')
+                            }
+                          </div>
                           <button className="edit-btn" onClick={(e) => { e.stopPropagation(); handleEditClick(secondaryAppointment); }}>✏️</button>
                         </div>
                       )}
