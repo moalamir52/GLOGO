@@ -448,15 +448,14 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
     setSearchTerm(initialSearchTerm);
   }, [initialSearchTerm]);
 
-  // Load appointments from Firebase on component mount
+  // Load appointments from localStorage directly
   useEffect(() => {
-    const loadData = async () => {
-      setIsLoading(true);
-      const data = await loadAppointments();
-      setAppointments(data);
-      setIsLoading(false);
-    };
-    loadData();
+    setIsLoading(true);
+    const savedAppointments = localStorage.getItem('appointments');
+    if (savedAppointments) {
+      setAppointments(JSON.parse(savedAppointments));
+    }
+    setIsLoading(false);
   }, []);
 
   // Save appointments to Firebase whenever appointments change
@@ -487,6 +486,13 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
   const workerCarCounts = getWorkerCarCounts();
   const uniqueVillaCount = new Set(appointments.map(a => a.villa)).size;
   const uniqueVillas = Array.from(new Set(appointments.map(a => a.villa))).sort(); // Define uniqueVillas here
+  
+  // Debug: Check localStorage
+  console.log('localStorage appointments:', localStorage.getItem('appointments'));
+  console.log('Current appointments:', appointments);
+  console.log('Appointments length:', appointments.length);
+  
+
 
   const openExportModal = () => {
     setIsModalOpen(false);
@@ -1375,10 +1381,10 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
               <div key={day} className="grid-cell">
                 {workers.map(worker => {
                   const primaryAppointment = appointments.find(
-                    appt => appt.day === day && appt.time.split(':')[0] === time.split(':')[0] && appt.worker === worker
+                    appt => appt.day === day && appt.time === time && appt.worker === worker
                   );
                   const secondaryAppointment = appointments.find(
-                    appt => appt.day === day && appt.time.split(':')[0] === time.split(':')[0] && appt.secondaryWorker === worker
+                    appt => appt.day === day && appt.time === time && appt.secondaryWorker === worker
                   );
 
                   const term = searchTerm.toLowerCase();
