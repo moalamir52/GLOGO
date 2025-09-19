@@ -28,22 +28,30 @@ echo [3/5] Creating commit...
 set /p commit_msg="Enter commit message (or press Enter for default): "
 if "%commit_msg%"=="" set commit_msg=Update project
 git commit -m "%commit_msg%"
-if %errorlevel% neq 0 (
+if %errorlevel% equ 1 (
+    echo INFO: No changes to commit, skipping...
+) else if %errorlevel% neq 0 (
     echo ERROR: Failed to create commit!
     pause
     exit /b 1
+) else (
+    echo SUCCESS: Commit created
 )
-echo SUCCESS: Commit created
 echo.
 
 echo [4/5] Pushing to GitHub...
-git push
-if %errorlevel% neq 0 (
-    echo ERROR: Failed to push to GitHub!
-    pause
-    exit /b 1
+git status --porcelain
+if %errorlevel% equ 0 (
+    git push
+    if %errorlevel% neq 0 (
+        echo ERROR: Failed to push to GitHub!
+        pause
+        exit /b 1
+    )
+    echo SUCCESS: Pushed to GitHub successfully
+) else (
+    echo INFO: Nothing to push to GitHub
 )
-echo SUCCESS: Pushed to GitHub successfully
 echo.
 
 echo [5/5] Deploying to Firebase...
