@@ -517,12 +517,37 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
               workerIntAssignments[assignedWorker]++;
             }
 
+            // Calculate wash type for this specific day
+            let washType = 'EXT'; // default
+            if (client.washmanPackage) {
+              const packageStr = client.washmanPackage.toLowerCase();
+              if (packageStr.includes('int')) {
+                let dayPosition = 0;
+                if (client.days.toLowerCase() === 'daily') {
+                  const dayMap = { 'Monday': 0, 'Tuesday': 1, 'Wednesday': 2, 'Thursday': 3, 'Friday': 4, 'Saturday': 5, 'Sunday': 6 };
+                  dayPosition = dayMap[day] || 0;
+                } else {
+                  const dayMap = { 'mon': 'Monday', 'tue': 'Tuesday', 'wed': 'Wednesday', 'thu': 'Thursday', 'thurs': 'Thursday', 'fri': 'Friday', 'sat': 'Saturday', 'sun': 'Sunday' };
+                  const clientDaysList = client.days.toLowerCase().split('-').map(d => dayMap[d.trim()]).filter(Boolean);
+                  dayPosition = clientDaysList.indexOf(day);
+                  if (dayPosition === -1) dayPosition = 0;
+                }
+                
+                if (packageStr.includes('2 ext 1 int')) {
+                  washType = (dayPosition % 3 === 2) ? 'INT' : 'EXT';
+                } else if (packageStr.includes('3 ext 1 int')) {
+                  washType = (dayPosition % 4 === 3) ? 'INT' : 'EXT';
+                }
+              }
+            }
+
             const newAppointment = {
               id: `auto_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
               villa: client.villa,
               day: day,
               time: time,
-              worker: assignedWorker
+              worker: assignedWorker,
+              manualWashType: washType
             };
 
             newAppointments.push(newAppointment);

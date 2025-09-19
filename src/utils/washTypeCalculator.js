@@ -34,15 +34,15 @@ const getClientWashType = (villaName, appointmentDay) => {
   
   const packageStr = washPackage.toLowerCase();
   
-  if (packageStr.includes('2 ext 1 int week')) {
-    return dayPosition === 1 ? '🧽 INT' : '🚗 EXT';
+  if (packageStr.includes('2 ext 1 int')) {
+    return (dayPosition % 3 === 2) ? '🧽 INT' : '🚗 EXT';
   }
   
-  if (packageStr.includes('3 ext 1 int week')) {
-    return dayPosition === 1 ? '🧽 INT' : '🚗 EXT';
+  if (packageStr.includes('3 ext 1 int')) {
+    return (dayPosition % 4 === 3) ? '🧽 INT' : '🚗 EXT';
   }
   
-  if (packageStr.includes('bi week')) {
+  if (packageStr.includes('bi week') || packageStr.includes('biweek')) {
     if (!client.startDate) return '🚗 EXT';
     
     let startDateObj;
@@ -60,12 +60,12 @@ const getClientWashType = (villaName, appointmentDay) => {
     const today = new Date();
     const weeksSinceStart = Math.floor((today - startDateObj) / (1000 * 60 * 60 * 24 * 7));
     
-    if (packageStr.includes('2 ext 1 int bi week')) {
+    if (packageStr.includes('2 ext 1 int')) {
       const biWeeklyPosition = (weeksSinceStart * 2 + dayPosition) % 4;
       return biWeeklyPosition === 3 ? '🧽 INT' : '🚗 EXT';
     }
     
-    if (packageStr.includes('3 ext 1 int bi week')) {
+    if (packageStr.includes('3 ext 1 int')) {
       const biWeeklyPosition = (weeksSinceStart * 3 + dayPosition) % 6;
       return biWeeklyPosition === 4 ? '🧽 INT' : '🚗 EXT';
     }
@@ -90,20 +90,20 @@ const getClientWashPattern = (client) => {
   
   const packageStr = washPackage.toLowerCase();
   
-  if (packageStr.includes('2 ext 1 int week')) {
-    return 'EXT→INT';
+  if (packageStr.includes('2 ext 1 int') && !packageStr.includes('bi')) {
+    return 'EXT→EXT→INT';
   }
   
-  if (packageStr.includes('3 ext 1 int week')) {
-    return 'EXT→INT→EXT';
-  }
-  
-  if (packageStr.includes('2 ext 1 int bi week')) {
+  if (packageStr.includes('3 ext 1 int') && !packageStr.includes('bi')) {
     return 'EXT→EXT→EXT→INT';
   }
   
-  if (packageStr.includes('3 ext 1 int bi week')) {
-    return 'EXT→EXT→EXT→EXT→INT→EXT';
+  if (packageStr.includes('2 ext 1 int') && packageStr.includes('bi')) {
+    return 'EXT→EXT→EXT→INT (Bi-weekly)';
+  }
+  
+  if (packageStr.includes('3 ext 1 int') && packageStr.includes('bi')) {
+    return 'EXT→EXT→EXT→EXT→INT→EXT (Bi-weekly)';
   }
   
   return '';

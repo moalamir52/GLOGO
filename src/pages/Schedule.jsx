@@ -677,7 +677,8 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       if (appt.manualWashType) {
         washType = appt.manualWashType === 'EXT' ? '🚗 EXT' : '🧽 INT';
       } else {
-        washType = getClientWashType(appt.villa, appt.day) || 'N/A';
+        const calculatedType = getClientWashType(appt.villa, appt.day);
+        washType = calculatedType || '🚗 EXT'; // Default to EXT instead of N/A
       }
       
       return {
