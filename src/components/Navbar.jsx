@@ -121,6 +121,46 @@ function Navbar({ setCurrentPage, currentPage, onLogout, username, userRole }) {
         >
           👥 Clients
         </button>
+        {userRole === 'admin' && (
+          <>
+            <button 
+              onClick={() => setCurrentPage('users')}
+              style={currentPage === 'users' ? {...styles.button, ...styles.activeButton} : styles.button}
+              onMouseOver={(e) => {
+                if (currentPage !== 'users') {
+                  e.target.style.backgroundColor = '#DAF2D0';
+                  e.target.style.transform = 'translateY(-2px)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (currentPage !== 'users') {
+                  e.target.style.backgroundColor = 'transparent';
+                  e.target.style.transform = 'translateY(0)';
+                }
+              }}
+            >
+              👥 Users
+            </button>
+            <button 
+              onClick={() => setCurrentPage('monitor')}
+              style={currentPage === 'monitor' ? {...styles.button, ...styles.activeButton} : styles.button}
+              onMouseOver={(e) => {
+                if (currentPage !== 'monitor') {
+                  e.target.style.backgroundColor = '#DAF2D0';
+                  e.target.style.transform = 'translateY(-2px)';
+                }
+              }}
+              onMouseOut={(e) => {
+                if (currentPage !== 'monitor') {
+                  e.target.style.backgroundColor = 'transparent';
+                  e.target.style.transform = 'translateY(0)';
+                }
+              }}
+            >
+              🔍 Monitor
+            </button>
+          </>
+        )}
         <button 
           onClick={onLogout}
           style={{

@@ -2,6 +2,8 @@ import { useState, useEffect, Fragment } from 'react';
 import '../App.css'; // Adjusted import path
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { useActivityLogger } from '../hooks/useActivityLogger';
+import { saveAppointments, loadAppointments } from '../services/database';
 // Define data constants directly
 const daysOfWeek = ["Saturday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const initialWorkers = ["Raqib", "Rahman"];
@@ -328,13 +330,31 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
   
   if (!isOpen) return null;
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (needsPassword && userRole !== 'admin') {
-      if (password === 'Marawan') {
-        onConfirm();
-        setPassword('');
-      } else {
-        // Show error in the same modal instead of browser alert
+      try {
+        const username = localStorage.getItem('glogo_username');
+        let userPassword = null;
+        
+        // Check database for user password
+        const { db } = await import('../firebase');
+        const { collection, getDocs } = await import('firebase/firestore');
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        const dbUser = querySnapshot.docs.find(doc => 
+          doc.data().username === username.toLowerCase()
+        );
+        if (dbUser) {
+          userPassword = dbUser.data().password;
+        }
+
+        if (userPassword === password) {
+          onConfirm();
+          setPassword('');
+        } else {
+          setPassword('');
+          return;
+        }
+      } catch (error) {
         setPassword('');
         return;
       }
@@ -364,18 +384,14 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
                 width: '100%',
                 padding: '10px',
                 borderRadius: '8px',
-                border: password === '' && password !== 'Marawan' ? '2px solid #dc3545' : '2px solid #e5e7eb',
+                border: '2px solid #e5e7eb',
                 fontSize: '1rem',
                 outline: 'none'
               }}
               autoFocus
               onKeyPress={(e) => e.key === 'Enter' && handleConfirm()}
             />
-            {password !== '' && password !== 'Marawan' && (
-              <p style={{ color: '#dc3545', fontSize: '0.8rem', margin: '0.5rem 0 0 0' }}>
-                Incorrect password!
-              </p>
-            )}
+
           </div>
         )}
         <div className="modal-actions">
@@ -439,11 +455,9 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
 
 // --- Main SchedulePage Component ---
 function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', userRole }) { // Receive the new props
-  const [appointments, setAppointments] = useState(() => {
-    const savedAppointments = localStorage.getItem('appointments');
-    return savedAppointments ? JSON.parse(savedAppointments) : initialAppointments;
-  });
-  const [isLoading, setIsLoading] = useState(false);
+  const [appointments, setAppointments] = useState(initialAppointments);
+  const { logActivity } = useActivityLogger();
+  const [isLoading, setIsLoading] = useState(true);
   const [formData, setFormData] = useState({ villa: '', day: ['Saturday'], time: '06:00', worker: 'Raqib', secondaryWorker: NO_WORKER_SELECTED });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAppointment, setEditingAppointment] = useState(null);
@@ -500,12 +514,57 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
 
 
 
+  // Load appointments from Firebase on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const loadedAppointments = await loadAppointments();
+        setAppointments(loadedAppointments);
+      } catch (error) {
+        console.error('Error loading appointments:', error);
+        // Fallback to localStorage if Firebase fails
+        const savedAppointments = localStorage.getItem('appointments');
+        if (savedAppointments) {
+          setAppointments(JSON.parse(savedAppointments));
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadData();
+  }, []);
+
   useEffect(() => {
     setSearchTerm(initialSearchTerm);
   }, [initialSearchTerm]);
 
+  // Save to both Firebase and localStorage whenever appointments change
   useEffect(() => {
-    localStorage.setItem('appointments', JSON.stringify(appointments));
+    if (appointments.length > 0 || !isLoading) {
+      localStorage.setItem('appointments', JSON.stringify(appointments));
+      saveAppointments(appointments).catch(error => {
+        console.error('Error saving to Firebase:', error);
+      });
+    }
+  }, [appointments, isLoading]);
+
+  // Auto-sync with Firebase every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const loadedAppointments = await loadAppointments();
+        const currentAppointmentsStr = JSON.stringify(appointments.sort((a, b) => a.id.localeCompare(b.id)));
+        const loadedAppointmentsStr = JSON.stringify(loadedAppointments.sort((a, b) => a.id.localeCompare(b.id)));
+        
+        if (currentAppointmentsStr !== loadedAppointmentsStr) {
+          setAppointments(loadedAppointments);
+        }
+      } catch (error) {
+        console.error('Auto-sync error:', error);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
   }, [appointments]);
 
   const getWorkerCarCounts = () => {
@@ -654,12 +713,12 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
     }
 
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const loadedSettings = JSON.parse(e.target.result);
         if (loadedSettings.appointments) {
           setAppointments(loadedSettings.appointments);
-
+          await saveAppointments(loadedSettings.appointments);
         } else {
           showAlert('Invalid settings file: missing appointments data.', 'Error');
         }
@@ -675,9 +734,11 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
     showConfirm(
       "Are you sure you want to clear the entire schedule? This action cannot be undone.",
       "Confirm Reset",
-      () => {
+      async () => {
         setAppointments([]);
         localStorage.removeItem('appointments');
+        await saveAppointments([]);
+        logActivity('Reset Schedule', 'Cleared entire schedule');
       },
       () => {},
       true
@@ -688,9 +749,11 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
     showConfirm(
       "Are you sure you want to clear all saved data from your browser? This will reset the schedule completely.",
       "Confirm Clear Data",
-      () => {
+      async () => {
         localStorage.removeItem('appointments');
         setAppointments(initialAppointments);
+        await saveAppointments([]);
+        logActivity('Clear Storage', 'Cleared all saved data');
       },
       () => {},
       true
@@ -708,6 +771,23 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       showAlert(`Time ${formData.time} is outside the allowed schedule (6:00 to 19:00).`, 'Invalid Time');
       return;
     }
+
+    // Check if user needs password for adding appointments
+    if (userRole !== 'admin') {
+      showConfirm(
+        `Are you sure you want to add appointment for ${formData.villa}?`,
+        "Confirm Add Appointment",
+        () => processSubmit(),
+        () => {},
+        true
+      );
+      return;
+    }
+
+    processSubmit();
+  };
+
+  const processSubmit = async () => {
 
     const showConfirmPromise = (message, title = 'Confirm') => {
       return new Promise((resolve) => {
@@ -846,6 +926,12 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
           return hourA - hourB;
         });
       });
+      
+      // Log activity
+      appointmentsToAdd.forEach(appt => {
+        logActivity('Add Appointment', `Added ${appt.villa} on ${appt.day} at ${appt.time} for ${appt.worker}`);
+      });
+      
       setFormData(prev => ({ ...prev, villa: '' }));
     } else if (abortAll) {
       showAlert('Schedule creation aborted due to conflicts or user cancellation.', 'Aborted');
@@ -863,6 +949,20 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
   };
 
   const handleUpdateAppointment = (updatedAppt) => {
+    if (userRole !== 'admin') {
+      showConfirm(
+        `Are you sure you want to edit appointment for ${updatedAppt.villa}?`,
+        "Confirm Edit Appointment",
+        () => processUpdateAppointment(updatedAppt),
+        () => {},
+        true
+      );
+      return;
+    }
+    processUpdateAppointment(updatedAppt);
+  };
+
+  const processUpdateAppointment = (updatedAppt) => {
     const finalUpdatedAppt = {
       ...updatedAppt,
       secondaryWorker: updatedAppt.secondaryWorker === NO_WORKER_SELECTED ? undefined : updatedAppt.secondaryWorker,
@@ -880,18 +980,44 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       const [hourB] = b.time.split(':').map(Number);
       return hourA - hourB;
     }));
+    
+    // Log activity
+    logActivity('Edit Appointment', `Modified ${finalUpdatedAppt.villa} - ${finalUpdatedAppt.day} at ${finalUpdatedAppt.time}`);
+    
     handleCloseModal();
   };
 
   const handleDeleteAppointment = (idToDelete) => {
+    const apptToDelete = appointments.find(a => a.id === idToDelete);
+    
+    if (userRole !== 'admin') {
+      showConfirm(
+        `Are you sure you want to delete appointment for ${apptToDelete?.villa}?`,
+        "Confirm Delete Appointment",
+        () => processDeleteAppointment(idToDelete),
+        () => {},
+        true
+      );
+      return;
+    }
+    
     showConfirm(
       "Are you sure you want to delete this appointment?",
       "Confirm Delete",
-      () => {
-        setAppointments(prev => prev.filter(appt => appt.id !== idToDelete));
-        handleCloseModal();
-      }
+      () => processDeleteAppointment(idToDelete)
     );
+  };
+
+  const processDeleteAppointment = (idToDelete) => {
+    const apptToDelete = appointments.find(a => a.id === idToDelete);
+    setAppointments(prev => prev.filter(appt => appt.id !== idToDelete));
+    
+    // Log activity
+    if (apptToDelete) {
+      logActivity('Delete Appointment', `Deleted ${apptToDelete.villa} - ${apptToDelete.day} at ${apptToDelete.time}`);
+    }
+    
+    handleCloseModal();
   };
 
   const handleVillaClick = (villaName) => {
@@ -930,15 +1056,42 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       // Allow swapping if both appointments are at the same time
       if (draggedAppointment.day === targetDay && draggedAppointment.time === targetTime) {
         // Swap the workers
-        setAppointments(prev => prev.map(appt => {
-          if (appt.id === draggedAppointment.id) {
-            return { ...appt, worker: targetWorker };
-          }
-          if (appt.id === targetSlotOccupied.id) {
-            return { ...appt, worker: draggedAppointment.worker };
-          }
-          return appt;
-        }));
+        // Check if user needs password for swapping appointments
+        if (userRole !== 'admin') {
+          showConfirm(
+            `Are you sure you want to swap ${draggedAppointment.villa} with ${targetSlotOccupied.villa}?`,
+            "Confirm Swap Appointments",
+            () => {
+              setAppointments(prev => prev.map(appt => {
+                if (appt.id === draggedAppointment.id) {
+                  return { ...appt, worker: targetWorker };
+                }
+                if (appt.id === targetSlotOccupied.id) {
+                  return { ...appt, worker: draggedAppointment.worker };
+                }
+                return appt;
+              }));
+              
+              // Log activity
+              logActivity('Swap Appointments', `Swapped ${draggedAppointment.villa} and ${targetSlotOccupied.villa} workers`);
+            },
+            () => {},
+            true
+          );
+        } else {
+          setAppointments(prev => prev.map(appt => {
+            if (appt.id === draggedAppointment.id) {
+              return { ...appt, worker: targetWorker };
+            }
+            if (appt.id === targetSlotOccupied.id) {
+              return { ...appt, worker: draggedAppointment.worker };
+            }
+            return appt;
+          }));
+          
+          // Log activity
+          logActivity('Swap Appointments', `Swapped ${draggedAppointment.villa} and ${targetSlotOccupied.villa} workers`);
+        }
         
         setDraggedAppointment(null);
         return;
@@ -949,12 +1102,36 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       }
     }
 
-    // Update the appointment with new worker
-    setAppointments(prev => prev.map(appt => 
-      appt.id === draggedAppointment.id 
-        ? { ...appt, worker: targetWorker, day: targetDay, time: targetTime }
-        : appt
-    ));
+    // Check if user needs password for moving appointments
+    if (userRole !== 'admin') {
+      showConfirm(
+        `Are you sure you want to move ${draggedAppointment.villa} to ${targetWorker}?`,
+        "Confirm Move Appointment",
+        () => {
+          // Update the appointment with new worker
+          setAppointments(prev => prev.map(appt => 
+            appt.id === draggedAppointment.id 
+              ? { ...appt, worker: targetWorker, day: targetDay, time: targetTime }
+              : appt
+          ));
+          
+          // Log activity
+          logActivity('Move Appointment', `Moved ${draggedAppointment.villa} to ${targetWorker} on ${targetDay} at ${targetTime}`);
+        },
+        () => {},
+        true
+      );
+    } else {
+      // Update the appointment with new worker
+      setAppointments(prev => prev.map(appt => 
+        appt.id === draggedAppointment.id 
+          ? { ...appt, worker: targetWorker, day: targetDay, time: targetTime }
+          : appt
+      ));
+      
+      // Log activity
+      logActivity('Move Appointment', `Moved ${draggedAppointment.villa} to ${targetWorker} on ${targetDay} at ${targetTime}`);
+    }
 
     setDraggedAppointment(null);
   };
@@ -1386,7 +1563,50 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
             marginRight: '0.5rem',
             marginBottom: '0.5rem'
           }}>🔄 Recalculate Wash Types</button>
+          <button type="button" onClick={async () => {
+            setIsLoading(true);
+            try {
+              const loadedAppointments = await loadAppointments();
+              setAppointments(loadedAppointments);
+              showAlert('تم تحديث الجدول بنجاح!', 'تحديث');
+            } catch (error) {
+              showAlert('خطأ في تحميل البيانات من الخادم', 'خطأ');
+            } finally {
+              setIsLoading(false);
+            }
+          }} style={{
+            padding: '12px 24px',
+            borderRadius: '12px',
+            border: 'none',
+            fontSize: '0.95rem',
+            fontWeight: '600',
+            cursor: 'pointer',
+            transition: 'all 0.3s ease',
+            background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+            color: 'white',
+            boxShadow: '0 6px 20px rgba(40, 167, 69, 0.3)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            marginRight: '0.5rem',
+            marginBottom: '0.5rem'
+          }}>🔄 تحديث من الخادم</button>
         </form>
+        <div style={{
+          marginTop: '1rem',
+          padding: '1rem',
+          backgroundColor: 'rgba(40, 167, 69, 0.1)',
+          borderRadius: '10px',
+          border: '1px solid rgba(40, 167, 69, 0.3)',
+          textAlign: 'center'
+        }}>
+          <p style={{
+            margin: '0',
+            color: '#155724',
+            fontSize: '0.9rem',
+            fontWeight: '500'
+          }}>💡 يتم تحديث الجدول تلقائياً كل 30 ثانية. إذا لم تظهر التحديثات، اضغط على "تحديث من الخادم"</p>
+        </div>
       </div>
 
       {isExportModalOpen && (

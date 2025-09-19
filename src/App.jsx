@@ -3,8 +3,12 @@ import Navbar from './components/Navbar';
 import SchedulePage from './pages/Schedule';
 import ClientsPage from './pages/Clients';
 import Report from './pages/Report';
+import UserManagement from './pages/UserManagement';
+import AdminMonitor from './pages/AdminMonitor';
 import LoginScreen from './components/LoginScreen';
 import { initializeFirebaseData } from './services/initializeData';
+import { db } from './firebase';
+import { collection, addDoc } from 'firebase/firestore';
 import './App.css';
 
 function App() {
@@ -41,6 +45,14 @@ function App() {
   };
 
   const handleLogout = () => {
+    // Log logout activity
+    addDoc(collection(db, 'activities'), {
+      username: username,
+      action: 'Logout',
+      details: 'User logged out',
+      timestamp: new Date()
+    }).catch(err => console.error('Error logging activity:', err));
+    
     setIsAuthenticated(false);
     setUserRole(null);
     setUsername('');
@@ -89,6 +101,12 @@ function App() {
         reportData={reportData}
         onBack={() => setCurrentPage('clients')}
       />;
+    }
+    if (currentPage === 'users' && userRole === 'admin') {
+      return <UserManagement />;
+    }
+    if (currentPage === 'monitor' && userRole === 'admin') {
+      return <AdminMonitor />;
     }
   };
 

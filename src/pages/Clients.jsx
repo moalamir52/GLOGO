@@ -6,6 +6,7 @@ import InvoiceGenerator from '../components/InvoiceGenerator';
 import { loadClientsData, saveClientsData } from '../services/database';
 import PasswordModal from '../components/PasswordModal';
 import { usePasswordProtection } from '../hooks/usePasswordProtection';
+import { useActivityLogger } from '../hooks/useActivityLogger';
 
 const tableStyles = {
   width: '100%',
@@ -133,6 +134,7 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
   const [comparisonResults, setComparisonResults] = useState(null);
   const [showComparison, setShowComparison] = useState(false);
   const [selectedClientForInvoice, setSelectedClientForInvoice] = useState(null);
+  const { logActivity } = useActivityLogger();
   
   // Password protection
   const {
@@ -165,6 +167,25 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
       saveClientsData(clientsData);
     }
   }, [clientsData, isDataLoading]);
+
+  // Auto-sync clients data with Firebase every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const loadedClientsData = await loadClientsData();
+        const currentClientsStr = JSON.stringify(clientsData.sort((a, b) => a.id.localeCompare(b.id)));
+        const loadedClientsStr = JSON.stringify(loadedClientsData.sort((a, b) => a.id.localeCompare(b.id)));
+        
+        if (currentClientsStr !== loadedClientsStr && loadedClientsData.length > 0) {
+          setClientsData(loadedClientsData);
+        }
+      } catch (error) {
+        console.error('Auto-sync clients error:', error);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [clientsData]);
 
   useEffect(() => {
     if (initialSearchTerm && searchInputRef.current) {
@@ -1020,7 +1041,11 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
           </button>
           
           <button
-            onClick={autoFillSchedule}
+            onClick={async () => {
+              // Save to Firebase before auto-filling
+              await saveClientsData(clientsData);
+              autoFillSchedule();
+            }}
             style={{
               ...buttonBaseStyles,
               background: 'linear-gradient(135deg, #548235 0%, #6a9c3d 100%)',
@@ -1052,7 +1077,47 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
             📊 View Report
           </button>
           
+          <button
+            onClick={async () => {
+              setIsDataLoading(true);
+              try {
+                const loadedClientsData = await loadClientsData();
+                setClientsData(loadedClientsData);
+                alert('تم تحديث بيانات العملاء بنجاح!');
+              } catch (error) {
+                alert('خطأ في تحميل البيانات من الخادم');
+              } finally {
+                setIsDataLoading(false);
+              }
+            }}
+            style={{
+              ...buttonBaseStyles,
+              background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)',
+              color: 'white',
+              boxShadow: '0 6px 20px rgba(40, 167, 69, 0.3)',
+              border: '2px solid transparent'
+            }}
+          >
+            🔄 تحديث من الخادم
+          </button>
+          
 
+        </div>
+
+        <div style={{
+          marginBottom: '1rem',
+          padding: '1rem',
+          backgroundColor: 'rgba(40, 167, 69, 0.1)',
+          borderRadius: '10px',
+          border: '1px solid rgba(40, 167, 69, 0.3)',
+          textAlign: 'center'
+        }}>
+          <p style={{
+            margin: '0',
+            color: '#155724',
+            fontSize: '0.9rem',
+            fontWeight: '500'
+          }}>💡 يتم تحديث بيانات العملاء تلقائياً كل 30 ثانية. إذا لم تظهر التحديثات، اضغط على "تحديث من الخادم"</p>
         </div>
 
         <div style={{ position: 'relative', maxWidth: '400px', marginBottom: '2rem' }}>

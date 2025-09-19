@@ -1,0 +1,9 @@
+@echo off
+echo Starting GLOGO Car Wash Schedule...
+echo.
+echo Opening browser...
+start http://localhost:5173
+echo.
+echo Starting development server...
+npm run dev
+pause
