@@ -55,7 +55,7 @@ if %errorlevel% equ 0 (
 echo.
 
 echo [5/5] Deploying to Firebase...
-firebase deploy
+firebase deploy --project schedule-3314f
 if %errorlevel% neq 0 (
     echo ERROR: Failed to deploy to Firebase!
     pause
