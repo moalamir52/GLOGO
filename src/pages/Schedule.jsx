@@ -1568,9 +1568,9 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
             try {
               const loadedAppointments = await loadAppointments();
               setAppointments(loadedAppointments);
-              showAlert('تم تحديث الجدول بنجاح!', 'تحديث');
+              showAlert('Schedule updated successfully!', 'Update');
             } catch (error) {
-              showAlert('خطأ في تحميل البيانات من الخادم', 'خطأ');
+              showAlert('Error loading data from server', 'Error');
             } finally {
               setIsLoading(false);
             }
@@ -1590,7 +1590,7 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
             gap: '8px',
             marginRight: '0.5rem',
             marginBottom: '0.5rem'
-          }}>🔄 تحديث من الخادم</button>
+          }}>🔄 Sync from Server</button>
         </form>
         <div style={{
           marginTop: '1rem',
@@ -1605,7 +1605,7 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
             color: '#155724',
             fontSize: '0.9rem',
             fontWeight: '500'
-          }}>💡 يتم تحديث الجدول تلقائياً كل 30 ثانية. إذا لم تظهر التحديثات، اضغط على "تحديث من الخادم"</p>
+          }}>💡 Schedule syncs automatically every 30 seconds. If updates don't appear, click "Sync from Server"</p>
         </div>
       </div>
 

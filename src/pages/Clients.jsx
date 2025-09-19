@@ -3,7 +3,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { getClientWashType, getClientWashTypeForDay, getWashTypeForClient, calculateWeeksSinceStart, getClientWashPattern } from '../utils/washTypeCalculator';
 import InvoiceGenerator from '../components/InvoiceGenerator';
-import { loadClientsData, saveClientsData } from '../services/database';
+import { loadClientsData, saveClientsData, loadAppointments, saveAppointments } from '../services/database';
 import PasswordModal from '../components/PasswordModal';
 import { usePasswordProtection } from '../hooks/usePasswordProtection';
 import { useActivityLogger } from '../hooks/useActivityLogger';
@@ -339,7 +339,7 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
     }
   };
 
-  const autoFillScheduleWithPassword = () => {
+  const autoFillScheduleWithPassword = async () => {
     const activeClients = clientsData.filter(client => 
       client.status && client.status.toLowerCase() === 'active' &&
       client.villa && client.time && client.days
@@ -350,7 +350,13 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
       return;
     }
 
-    const existingAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    // Load existing appointments from Firebase first, fallback to localStorage
+    let existingAppointments;
+    try {
+      existingAppointments = await loadAppointments();
+    } catch (error) {
+      existingAppointments = JSON.parse(localStorage.getItem('appointments') || '[]');
+    }
     const newAppointments = [...existingAppointments];
     
     const workers = ['Raqib', 'Rahman'];
@@ -527,7 +533,8 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
 
     // Balance Internal/External workload between workers
     const balanceWorkload = (appointments) => {
-      const clientsData = JSON.parse(localStorage.getItem('clientsData') || '[]');
+      // Use current clientsData instead of localStorage
+      const currentClientsData = clientsData;
       
       // Get INT/EXT counts for each worker
       const workerStats = {};
@@ -538,7 +545,7 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
       appointments.forEach(appt => {
         if (!appt.worker || !workerStats[appt.worker]) return;
         
-        const client = clientsData.find(c => 
+        const client = currentClientsData.find(c => 
           c.villa && appt.villa && 
           c.villa.replace(/\s+/g, ' ').trim().toLowerCase() === appt.villa.replace(/\s+/g, ' ').trim().toLowerCase()
         );
@@ -663,7 +670,9 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
     // Apply workload balancing
     const balancedAppointments = balanceWorkload(newAppointments);
     
+    // Save to both localStorage and Firebase
     localStorage.setItem('appointments', JSON.stringify(balancedAppointments));
+    await saveAppointments(balancedAppointments);
     
     const addedCount = balancedAppointments.length - existingAppointments.length;
     const workerCounts = {};
@@ -677,11 +686,11 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
       finalWorkerStats[worker] = { int: 0, ext: 0, total: 0 };
     });
     
-    const clientsData2 = JSON.parse(localStorage.getItem('clientsData') || '[]');
+    // Use current clientsData instead of localStorage
     balancedAppointments.forEach(appt => {
       if (!appt.worker || !finalWorkerStats[appt.worker]) return;
       
-      const client = clientsData2.find(c => 
+      const client = clientsData.find(c => 
         c.villa && appt.villa && 
         c.villa.replace(/\s+/g, ' ').trim().toLowerCase() === appt.villa.replace(/\s+/g, ' ').trim().toLowerCase()
       );
@@ -1063,7 +1072,7 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
               if (savedReportData && navigateToReport) {
                 navigateToReport(JSON.parse(savedReportData));
               } else {
-                alert('لا يوجد تقرير متاح. يرجى تشغيل الجدولة التلقائية أولاً.');
+                alert('No report available. Please run Auto Fill Schedule first.');
               }
             }}
             style={{
@@ -1083,9 +1092,9 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
               try {
                 const loadedClientsData = await loadClientsData();
                 setClientsData(loadedClientsData);
-                alert('تم تحديث بيانات العملاء بنجاح!');
+                alert('Clients data updated successfully!');
               } catch (error) {
-                alert('خطأ في تحميل البيانات من الخادم');
+                alert('Error loading data from server');
               } finally {
                 setIsDataLoading(false);
               }
@@ -1098,7 +1107,7 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
               border: '2px solid transparent'
             }}
           >
-            🔄 تحديث من الخادم
+            🔄 Sync from Server
           </button>
           
 
@@ -1117,7 +1126,7 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
             color: '#155724',
             fontSize: '0.9rem',
             fontWeight: '500'
-          }}>💡 يتم تحديث بيانات العملاء تلقائياً كل 30 ثانية. إذا لم تظهر التحديثات، اضغط على "تحديث من الخادم"</p>
+          }}>💡 Clients data syncs automatically every 30 seconds. If updates don't appear, click "Sync from Server"</p>
         </div>
 
         <div style={{ position: 'relative', maxWidth: '400px', marginBottom: '2rem' }}>
