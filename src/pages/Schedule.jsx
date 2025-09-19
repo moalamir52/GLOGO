@@ -1049,6 +1049,16 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
             position: 'relative',
             zIndex: 1
           }}>GLOGO car wash Schedule</h1>
+          <div style={{
+            position: 'absolute',
+            bottom: '10px',
+            right: '20px',
+            color: 'rgba(255,255,255,0.7)',
+            fontSize: '0.8rem',
+            fontWeight: '400'
+          }}>
+            Developed by Mihamed Alamir
+          </div>
         </div>
       </div>
       {/* Worker Car Counts and Client Stats */}

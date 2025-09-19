@@ -952,13 +952,24 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
       />
     <div style={containerStyles}>
       <div style={cardStyles}>
-        <h1 style={{
-          color: '#548235',
-          fontSize: '2.5rem',
-          fontWeight: '700',
-          marginBottom: '2rem',
-          textAlign: 'center'
-        }}>Clients Management</h1>
+        <div style={{ position: 'relative', textAlign: 'center', marginBottom: '2rem' }}>
+          <h1 style={{
+            color: '#548235',
+            fontSize: '2.5rem',
+            fontWeight: '700',
+            margin: '0'
+          }}>Clients Management</h1>
+          <div style={{
+            position: 'absolute',
+            bottom: '-20px',
+            right: '0',
+            color: '#6c757d',
+            fontSize: '0.8rem',
+            fontStyle: 'italic'
+          }}>
+            Developed by Mihamed Alamir
+          </div>
+        </div>
         
         <div style={{ marginBottom: '2rem', display: 'flex', gap: '1rem', flexWrap: 'wrap', justifyContent: 'center' }}>
           <input
