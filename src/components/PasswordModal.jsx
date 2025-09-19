@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import './PasswordModal.css';
+import { PASSWORDS } from '../config/passwords';
 
 const PasswordModal = ({ isOpen, onClose, onSuccess, action }) => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const ADMIN_PASSWORD = 'GLOGO2025'; // Can be changed
+  const ADMIN_PASSWORD = PASSWORDS.EDIT_PASSWORD;
 
   const handleSubmit = (e) => {
     e.preventDefault();

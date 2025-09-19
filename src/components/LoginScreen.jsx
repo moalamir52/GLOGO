@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import './LoginScreen.css';
+import { USERS } from '../config/passwords';
 
 const LoginScreen = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const USERS = {
-    admin: { password: 'Yelo@2026', role: 'admin' },
-    user: { password: 'GLOGO2025', role: 'user' }
-  };
+
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -65,7 +63,7 @@ const LoginScreen = ({ onLogin }) => {
         </form>
         
         <div className="login-footer">
-          <p>© 2024 GLOGO Car Wash - Secure System</p>
+          <p>© 2024 GLOGO Car Wash - Developed by Mihamed Alamir</p>
         </div>
       </div>
     </div>
