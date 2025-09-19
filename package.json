@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://moalamir52.github.io/Schedule",
+
   "scripts": {
     "dev": "vite",
     "start": "vite",
@@ -11,7 +11,11 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "deploy": "gh-pages -d redirect",
+    "firebase:build": "npm run build",
+    "firebase:deploy": "firebase deploy",
+    "firebase:serve": "firebase serve",
+    "firebase:update": "npm run build && firebase deploy"
   },
   "dependencies": {
     "file-saver": "^2.0.5",

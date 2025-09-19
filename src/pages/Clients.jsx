@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { getClientWashType, getClientWashTypeForDay, getWashTypeForClient, calculateWeeksSinceStart, getClientWashPattern } from '../utils/washTypeCalculator';
 import InvoiceGenerator from '../components/InvoiceGenerator';
+import { loadClientsData, saveClientsData } from '../services/database';
 
 const tableStyles = {
   width: '100%',
@@ -132,26 +133,26 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
   const [showComparison, setShowComparison] = useState(false);
   const [selectedClientForInvoice, setSelectedClientForInvoice] = useState(null);
 
-  // Load clients data from localStorage on component mount
+  // Load clients data from Firebase on component mount
   useEffect(() => {
-    const savedData = localStorage.getItem('clientsData');
-    if (savedData) {
+    const loadData = async () => {
       try {
-        const parsedData = JSON.parse(savedData);
-        if (parsedData.length > 0) {
-          setClientsData(parsedData);
+        const data = await loadClientsData();
+        if (data.length > 0) {
+          setClientsData(data);
         }
       } catch (error) {
         console.error('Error loading clients data:', error);
       }
-    }
-    setIsDataLoading(false);
+      setIsDataLoading(false);
+    };
+    loadData();
   }, []);
 
-  // Save clients data to localStorage whenever clientsData changes
+  // Save clients data to Firebase whenever clientsData changes
   useEffect(() => {
-    if (!isDataLoading) {
-      localStorage.setItem('clientsData', JSON.stringify(clientsData));
+    if (!isDataLoading && clientsData.length > 0) {
+      saveClientsData(clientsData);
     }
   }, [clientsData, isDataLoading]);
 

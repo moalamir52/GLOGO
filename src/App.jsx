@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
 import SchedulePage from './pages/Schedule';
 import ClientsPage from './pages/Clients';
 import Report from './pages/Report';
+import { initializeFirebaseData } from './services/initializeData';
 import './App.css';
 
 function App() {
@@ -10,6 +11,10 @@ function App() {
   const [clientSearchTerm, setClientSearchTerm] = useState(''); // New state for client search
   const [scheduleSearchTerm, setScheduleSearchTerm] = useState(''); // New state for schedule search
   const [reportData, setReportData] = useState(null); // State for report data
+
+  useEffect(() => {
+    initializeFirebaseData();
+  }, []);
 
   const navigateToClientsWithSearch = (searchTerm = '') => {
     setClientSearchTerm(searchTerm);

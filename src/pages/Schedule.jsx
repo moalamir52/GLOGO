@@ -6,6 +6,7 @@ import { daysOfWeek, workers as initialWorkers } from '../data'; // Using data f
 import WorkerAppointmentsModal from '../components/WorkerAppointmentsModal'; // Import the new modal
 import UniqueVillasModal from '../components/UniqueVillasModal'; // Import the new UniqueVillasModal
 import { getClientWashType } from '../utils/washTypeCalculator';
+import { loadAppointments, saveAppointments } from '../services/database';
 
 // --- SVG Icons ---
 const VillaIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 20V14H14V20H19V12H22L12 3L2 12H5V20H10Z" fill="currentColor"/></svg>;
@@ -390,10 +391,8 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
 
 // --- Main SchedulePage Component ---
 function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) { // Receive the new props
-  const [appointments, setAppointments] = useState(() => {
-    const savedAppointments = localStorage.getItem('appointments');
-    return savedAppointments ? JSON.parse(savedAppointments) : initialAppointments;
-  });
+  const [appointments, setAppointments] = useState(initialAppointments);
+  const [isDataLoading, setIsDataLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({ villa: '', day: ['Saturday'], time: '06:00', worker: 'Raqib', secondaryWorker: NO_WORKER_SELECTED });
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -446,13 +445,30 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
     });
   };
 
+  // Load appointments from Firebase on component mount
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const data = await loadAppointments();
+        setAppointments(data);
+      } catch (error) {
+        console.error('Error loading appointments:', error);
+      }
+      setIsDataLoading(false);
+    };
+    loadData();
+  }, []);
+
   useEffect(() => {
     setSearchTerm(initialSearchTerm);
   }, [initialSearchTerm]);
 
+  // Save appointments to Firebase whenever appointments change
   useEffect(() => {
-    localStorage.setItem('appointments', JSON.stringify(appointments));
-  }, [appointments]);
+    if (!isDataLoading && appointments.length >= 0) {
+      saveAppointments(appointments);
+    }
+  }, [appointments, isDataLoading]);
 
   const getWorkerCarCounts = () => {
     const counts = {};
@@ -976,7 +992,7 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
           }}></div>
           <h1 style={{
             color: 'white',
-            fontSize: '2.5rem',
+            fontSize: 'clamp(1.5rem, 4vw, 2.5rem)',
             fontWeight: '700',
             margin: '0',
             textAlign: 'center',
@@ -990,8 +1006,8 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
       {/* Worker Car Counts and Client Stats */}
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-        gap: '1.5rem',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '1rem',
         marginBottom: '2rem'
       }}>
         <div style={{
@@ -1351,22 +1367,25 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
         />
       )}
 
-      <div className="schedule-grid">
-        <div className="header-cell">Time</div>
+      <div className="schedule-grid" style={{
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch'
+      }}>
+        <div className="header-cell" style={{ minWidth: '80px' }}>Time</div>
         {daysOfWeek.map(day => (
-          <div key={day} className="header-cell day-header">
+          <div key={day} className="header-cell day-header" style={{ minWidth: '200px' }}>
             <span>{day}</span>
             <div className="worker-headers">
-              {workers.map(w => <span key={w}>{w}</span>)}
+              {workers.map(w => <span key={w} style={{ fontSize: '0.8rem' }}>{w}</span>)}
             </div>
           </div>
         ))}
 
         {timeSlots.map(time => (
           <Fragment key={time}>
-            <div className="time-slot-cell">{time}</div>
+            <div className="time-slot-cell" style={{ minWidth: '80px' }}>{time}</div>
             {daysOfWeek.map(day => (
-              <div key={day} className="grid-cell">
+              <div key={day} className="grid-cell" style={{ minWidth: '200px' }}>
                 {workers.map(worker => {
                   const primaryAppointment = appointments.find(
                     appt => appt.day === day && appt.time === time && appt.worker === worker
