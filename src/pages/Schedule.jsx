@@ -7,6 +7,8 @@ import WorkerAppointmentsModal from '../components/WorkerAppointmentsModal'; // 
 import UniqueVillasModal from '../components/UniqueVillasModal'; // Import the new UniqueVillasModal
 import { getClientWashType } from '../utils/washTypeCalculator';
 import { loadAppointments, saveAppointments } from '../services/database';
+import PasswordModal from '../components/PasswordModal';
+import { usePasswordProtection } from '../hooks/usePasswordProtection';
 
 // --- SVG Icons ---
 const VillaIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 20V14H14V20H19V12H22L12 3L2 12H5V20H10Z" fill="currentColor"/></svg>;
@@ -390,7 +392,7 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
 }
 
 // --- Main SchedulePage Component ---
-function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) { // Receive the new props
+function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', userRole }) { // Receive the new props
   const [appointments, setAppointments] = useState(initialAppointments);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
@@ -403,6 +405,15 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
   const [isWorkerAppointmentsModalOpen, setIsWorkerAppointmentsModalOpen] = useState(false); // New state for worker appointments modal
   const [isUniqueVillasModalOpen, setIsUniqueVillasModalOpen] = useState(false); // New state for unique villas modal
   const [draggedAppointment, setDraggedAppointment] = useState(null); // For drag and drop
+  
+  // Password protection
+  const {
+    isModalOpen: isPasswordModalOpen,
+    actionDescription,
+    requestPassword,
+    handlePasswordSuccess,
+    handlePasswordClose
+  } = usePasswordProtection();
 
   // State for custom alert/confirm dialog
   const [alertDialog, setAlertDialog] = useState({
@@ -662,6 +673,14 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (userRole === 'admin') {
+      handleSubmitWithPassword(e);
+    } else {
+      requestPassword(() => handleSubmitWithPassword(e), 'add appointment');
+    }
+  };
+
+  const handleSubmitWithPassword = async (e) => {
     if (!formData.villa) {
       showAlert('Please enter a villa name.', 'Validation Error');
       return;
@@ -826,6 +845,14 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
   };
 
   const handleUpdateAppointment = (updatedAppt) => {
+    if (userRole === 'admin') {
+      handleUpdateAppointmentWithPassword(updatedAppt);
+    } else {
+      requestPassword(() => handleUpdateAppointmentWithPassword(updatedAppt), 'edit appointment');
+    }
+  };
+
+  const handleUpdateAppointmentWithPassword = (updatedAppt) => {
     const finalUpdatedAppt = {
       ...updatedAppt,
       secondaryWorker: updatedAppt.secondaryWorker === NO_WORKER_SELECTED ? undefined : updatedAppt.secondaryWorker,
@@ -847,6 +874,14 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
   };
 
   const handleDeleteAppointment = (idToDelete) => {
+    if (userRole === 'admin') {
+      handleDeleteAppointmentWithPassword(idToDelete);
+    } else {
+      requestPassword(() => handleDeleteAppointmentWithPassword(idToDelete), 'delete appointment');
+    }
+  };
+
+  const handleDeleteAppointmentWithPassword = (idToDelete) => {
     showConfirm(
       "Are you sure you want to delete this appointment?",
       "Confirm Delete",
@@ -883,6 +918,14 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
       return;
     }
 
+    if (userRole === 'admin') {
+      handleDropWithPassword(targetWorker, targetDay, targetTime);
+    } else {
+      requestPassword(() => handleDropWithPassword(targetWorker, targetDay, targetTime), 'move appointment');
+    }
+  };
+
+  const handleDropWithPassword = (targetWorker, targetDay, targetTime) => {
     // Check if target slot is occupied
     const targetSlotOccupied = appointments.find(appt => 
       appt.day === targetDay && 
@@ -905,7 +948,6 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
         }));
         
         setDraggedAppointment(null);
-
         return;
       } else {
         showAlert(`${targetWorker} is already busy at ${targetTime} on ${targetDay}`, 'Slot Occupied');
@@ -922,7 +964,6 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
     ));
 
     setDraggedAppointment(null);
-
   };
 
   const handleDragEnd = () => {
@@ -965,6 +1006,13 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '' }) {
         options={alertDialog.options}
         onConfirm={alertDialog.onConfirm}
         onCancel={alertDialog.onCancel}
+      />
+
+      <PasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={handlePasswordClose}
+        onSuccess={handlePasswordSuccess}
+        action={actionDescription}
       />
 
       <div style={{

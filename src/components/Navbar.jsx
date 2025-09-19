@@ -39,10 +39,22 @@ const styles = {
   }
 };
 
-function Navbar({ setCurrentPage, currentPage }) {
+function Navbar({ setCurrentPage, currentPage, onLogout, username, userRole }) {
   return (
     <nav style={styles.navbar}>
       <div style={styles.buttonContainer}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 16px',
+          backgroundColor: userRole === 'admin' ? '#28a745' : '#17a2b8',
+          borderRadius: '8px',
+          marginRight: '10px'
+        }}>
+          <span style={{ color: 'white', fontWeight: '600', fontSize: '0.9rem' }}>
+            {userRole === 'admin' ? '👑' : '👤'} {username} ({userRole})
+          </span>
+        </div>
         <button 
           onClick={() => setCurrentPage('schedule')}
           style={currentPage === 'schedule' ? {...styles.button, ...styles.activeButton} : styles.button}
@@ -78,6 +90,25 @@ function Navbar({ setCurrentPage, currentPage }) {
           }}
         >
           👥 Clients
+        </button>
+        <button 
+          onClick={onLogout}
+          style={{
+            ...styles.button,
+            backgroundColor: '#dc3545',
+            color: 'white',
+            marginLeft: '20px'
+          }}
+          onMouseOver={(e) => {
+            e.target.style.backgroundColor = '#c82333';
+            e.target.style.transform = 'translateY(-2px)';
+          }}
+          onMouseOut={(e) => {
+            e.target.style.backgroundColor = '#dc3545';
+            e.target.style.transform = 'translateY(0)';
+          }}
+        >
+          🚪 Exit
         </button>
       </div>
     </nav>

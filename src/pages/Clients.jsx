@@ -5,6 +5,8 @@ import { saveAs } from 'file-saver';
 import { getClientWashType, getClientWashTypeForDay, getWashTypeForClient, calculateWeeksSinceStart, getClientWashPattern } from '../utils/washTypeCalculator';
 import InvoiceGenerator from '../components/InvoiceGenerator';
 import { loadClientsData, saveClientsData } from '../services/database';
+import PasswordModal from '../components/PasswordModal';
+import { usePasswordProtection } from '../hooks/usePasswordProtection';
 
 const tableStyles = {
   width: '100%',
@@ -123,7 +125,7 @@ const isValidDays = (daysString) => {
 
 const googleSheetUrl = 'https://docs.google.com/spreadsheets/d/1sG0itNKcxg10mOzbuiY_i-IsPBQ3fmXwXDvqCbT3kFU/export?format=csv&gid=0';
 
-function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, navigateToReport }) {
+function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, navigateToReport, userRole }) {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const searchInputRef = useRef(null);
   const [clientsData, setClientsData] = useState(defaultClients);
@@ -132,6 +134,15 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
   const [comparisonResults, setComparisonResults] = useState(null);
   const [showComparison, setShowComparison] = useState(false);
   const [selectedClientForInvoice, setSelectedClientForInvoice] = useState(null);
+  
+  // Password protection
+  const {
+    isModalOpen: isPasswordModalOpen,
+    actionDescription,
+    requestPassword,
+    handlePasswordSuccess,
+    handlePasswordClose
+  } = usePasswordProtection();
 
   // Load clients data from Firebase on component mount
   useEffect(() => {
@@ -301,6 +312,14 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
   };
 
   const autoFillSchedule = () => {
+    if (userRole === 'admin') {
+      autoFillScheduleWithPassword();
+    } else {
+      requestPassword(() => autoFillScheduleWithPassword(), 'auto-fill schedule');
+    }
+  };
+
+  const autoFillScheduleWithPassword = () => {
     const activeClients = clientsData.filter(client => 
       client.status && client.status.toLowerCase() === 'active' &&
       client.villa && client.time && client.days
@@ -924,6 +943,13 @@ function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, nav
           onClose={() => setSelectedClientForInvoice(null)}
         />
       )}
+      
+      <PasswordModal
+        isOpen={isPasswordModalOpen}
+        onClose={handlePasswordClose}
+        onSuccess={handlePasswordSuccess}
+        action={actionDescription}
+      />
     <div style={containerStyles}>
       <div style={cardStyles}>
         <h1 style={{
