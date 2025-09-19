@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { clients as defaultClients } from '../data';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { getClientWashType, getClientWashTypeForDay, getWashTypeForClient, calculateWeeksSinceStart, getClientWashPattern } from '../utils/washTypeCalculator';
@@ -128,7 +127,7 @@ const googleSheetUrl = 'https://docs.google.com/spreadsheets/d/1sG0itNKcxg10mOzb
 function ClientsPage({ initialSearchTerm = '', navigateToScheduleWithSearch, navigateToReport, userRole }) {
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const searchInputRef = useRef(null);
-  const [clientsData, setClientsData] = useState(defaultClients);
+  const [clientsData, setClientsData] = useState([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [comparisonResults, setComparisonResults] = useState(null);

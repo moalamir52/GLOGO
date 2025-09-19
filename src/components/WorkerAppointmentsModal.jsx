@@ -1,5 +1,6 @@
 import React from 'react';
-import { daysOfWeek } from '../data';
+
+const daysOfWeek = ["Saturday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 
 function WorkerAppointmentsModal({ workerName, appointments, onClose, onEditAppointment, onDeleteAppointment, showAlert }) {
   const formatTime = (time) => {

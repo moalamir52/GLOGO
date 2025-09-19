@@ -2,7 +2,9 @@ import { useState, useEffect, Fragment } from 'react';
 import '../App.css'; // Adjusted import path
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { daysOfWeek, workers as initialWorkers } from '../data'; // Using data from central file
+// Define data constants directly
+const daysOfWeek = ["Saturday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+const initialWorkers = ["Raqib", "Rahman"];
 import WorkerAppointmentsModal from '../components/WorkerAppointmentsModal'; // Import the new modal
 import UniqueVillasModal from '../components/UniqueVillasModal'; // Import the new UniqueVillasModal
 import { getClientWashType } from '../utils/washTypeCalculator';
