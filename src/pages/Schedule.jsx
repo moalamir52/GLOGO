@@ -6,9 +6,6 @@ import { daysOfWeek, workers as initialWorkers } from '../data'; // Using data f
 import WorkerAppointmentsModal from '../components/WorkerAppointmentsModal'; // Import the new modal
 import UniqueVillasModal from '../components/UniqueVillasModal'; // Import the new UniqueVillasModal
 import { getClientWashType } from '../utils/washTypeCalculator';
-import { loadAppointments, saveAppointments } from '../services/database';
-import PasswordModal from '../components/PasswordModal';
-import { usePasswordProtection } from '../hooks/usePasswordProtection';
 
 // --- SVG Icons ---
 const VillaIcon = () => <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 20V14H14V20H19V12H22L12 3L2 12H5V20H10Z" fill="currentColor"/></svg>;
@@ -324,16 +321,63 @@ function ExportModal({ onClose, onExport }) {
 }
 
 // --- Custom Alert/Confirm Dialog Component ---
-function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCancel }) {
+function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCancel, needsPassword, userRole }) {
+  const [password, setPassword] = useState('');
+  
   if (!isOpen) return null;
 
+  const handleConfirm = () => {
+    if (needsPassword && userRole !== 'admin') {
+      if (password === 'Marawan') {
+        onConfirm();
+        setPassword('');
+      } else {
+        // Show error in the same modal instead of browser alert
+        setPassword('');
+        return;
+      }
+    } else {
+      onConfirm();
+    }
+  };
+
+  const handleCancel = () => {
+    setPassword('');
+    onCancel();
+  };
+
   return (
-    <div className="modal-backdrop" style={{ zIndex: 1001 }} onClick={onCancel}>
+    <div className="modal-backdrop" style={{ zIndex: 1001 }} onClick={handleCancel}>
       <div className="modal-content custom-alert-dialog" onClick={e => e.stopPropagation()}>
         <h2>{title}</h2>
         <p style={{whiteSpace: 'pre-wrap'}}>{message}</p>
+        {needsPassword && userRole !== 'admin' && (
+          <div style={{ margin: '1rem 0' }}>
+            <input
+              type="password"
+              placeholder="Enter password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px',
+                borderRadius: '8px',
+                border: password === '' && password !== 'Marawan' ? '2px solid #dc3545' : '2px solid #e5e7eb',
+                fontSize: '1rem',
+                outline: 'none'
+              }}
+              autoFocus
+              onKeyPress={(e) => e.key === 'Enter' && handleConfirm()}
+            />
+            {password !== '' && password !== 'Marawan' && (
+              <p style={{ color: '#dc3545', fontSize: '0.8rem', margin: '0.5rem 0 0 0' }}>
+                Incorrect password!
+              </p>
+            )}
+          </div>
+        )}
         <div className="modal-actions">
-          {options.includes('cancel') && <button type="button" onClick={onCancel} style={{
+          {options.includes('cancel') && <button type="button" onClick={handleCancel} style={{
             background: 'linear-gradient(135deg, #6c757d 0%, #495057 100%)',
             color: 'white',
             padding: '10px 20px',
@@ -346,7 +390,7 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
             boxShadow: '0 4px 15px rgba(108, 117, 125, 0.3)',
             marginRight: '0.5rem'
           }}>Cancel</button>}
-          {options.includes('ok') && <button type="button" onClick={onConfirm} style={{
+          {options.includes('ok') && <button type="button" onClick={handleConfirm} style={{
             background: 'linear-gradient(135deg, #548235 0%, #6a9c3d 100%)',
             color: 'white',
             padding: '10px 20px',
@@ -359,7 +403,7 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
             boxShadow: '0 4px 15px rgba(84, 130, 53, 0.3)',
             marginRight: '0.5rem'
           }}>OK</button>}
-          {options.includes('yes') && <button type="button" onClick={onConfirm} style={{
+          {options.includes('yes') && <button type="button" onClick={handleConfirm} style={{
             background: 'linear-gradient(135deg, #548235 0%, #6a9c3d 100%)',
             color: 'white',
             padding: '10px 20px',
@@ -372,7 +416,7 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
             boxShadow: '0 4px 15px rgba(84, 130, 53, 0.3)',
             marginRight: '0.5rem'
           }}>Yes</button>}
-          {options.includes('no') && <button type="button" onClick={onCancel} style={{
+          {options.includes('no') && <button type="button" onClick={handleCancel} style={{
             background: 'linear-gradient(135deg, #dc3545 0%, #c82333 100%)',
             color: 'white',
             padding: '10px 20px',
@@ -393,8 +437,10 @@ function CustomAlertDialog({ isOpen, title, message, options, onConfirm, onCance
 
 // --- Main SchedulePage Component ---
 function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', userRole }) { // Receive the new props
-  const [appointments, setAppointments] = useState(initialAppointments);
-  const [isDataLoading, setIsDataLoading] = useState(true);
+  const [appointments, setAppointments] = useState(() => {
+    const savedAppointments = localStorage.getItem('appointments');
+    return savedAppointments ? JSON.parse(savedAppointments) : initialAppointments;
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({ villa: '', day: ['Saturday'], time: '06:00', worker: 'Raqib', secondaryWorker: NO_WORKER_SELECTED });
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -406,14 +452,7 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
   const [isUniqueVillasModalOpen, setIsUniqueVillasModalOpen] = useState(false); // New state for unique villas modal
   const [draggedAppointment, setDraggedAppointment] = useState(null); // For drag and drop
   
-  // Password protection
-  const {
-    isModalOpen: isPasswordModalOpen,
-    actionDescription,
-    requestPassword,
-    handlePasswordSuccess,
-    handlePasswordClose
-  } = usePasswordProtection();
+
 
   // State for custom alert/confirm dialog
   const [alertDialog, setAlertDialog] = useState({
@@ -439,12 +478,13 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
     });
   };
 
-  const showConfirm = (message, title = 'Confirm', onYes = () => {}, onNo = () => {}) => {
+  const showConfirm = (message, title = 'Confirm', onYes = () => {}, onNo = () => {}, needsPassword = false) => {
     setAlertDialog({
       isOpen: true,
       title,
       message,
       options: ['yes', 'no'],
+      needsPassword,
       onConfirm: () => {
         setAlertDialog(prev => ({ ...prev, isOpen: false }));
         onYes();
@@ -456,30 +496,15 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
     });
   };
 
-  // Load appointments from Firebase on component mount
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const data = await loadAppointments();
-        setAppointments(data);
-      } catch (error) {
-        console.error('Error loading appointments:', error);
-      }
-      setIsDataLoading(false);
-    };
-    loadData();
-  }, []);
+
 
   useEffect(() => {
     setSearchTerm(initialSearchTerm);
   }, [initialSearchTerm]);
 
-  // Save appointments to Firebase whenever appointments change
   useEffect(() => {
-    if (!isDataLoading && appointments.length >= 0) {
-      saveAppointments(appointments);
-    }
-  }, [appointments, isDataLoading]);
+    localStorage.setItem('appointments', JSON.stringify(appointments));
+  }, [appointments]);
 
   const getWorkerCarCounts = () => {
     const counts = {};
@@ -502,10 +527,7 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
   const uniqueVillaCount = new Set(appointments.map(a => a.villa)).size;
   const uniqueVillas = Array.from(new Set(appointments.map(a => a.villa))).sort(); // Define uniqueVillas here
   
-  // Debug: Check localStorage
-  console.log('localStorage appointments:', localStorage.getItem('appointments'));
-  console.log('Current appointments:', appointments);
-  console.log('Appointments length:', appointments.length);
+
   
 
 
@@ -654,8 +676,9 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       () => {
         setAppointments([]);
         localStorage.removeItem('appointments');
-
-      }
+      },
+      () => {},
+      true
     );
   };
 
@@ -665,22 +688,15 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       "Confirm Clear Data",
       () => {
         localStorage.removeItem('appointments');
-        setAppointments(initialAppointments); // Reset to initial empty state
-
-      }
+        setAppointments(initialAppointments);
+      },
+      () => {},
+      true
     );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (userRole === 'admin') {
-      handleSubmitWithPassword(e);
-    } else {
-      requestPassword(() => handleSubmitWithPassword(e), 'add appointment');
-    }
-  };
-
-  const handleSubmitWithPassword = async (e) => {
     if (!formData.villa) {
       showAlert('Please enter a villa name.', 'Validation Error');
       return;
@@ -845,14 +861,6 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
   };
 
   const handleUpdateAppointment = (updatedAppt) => {
-    if (userRole === 'admin') {
-      handleUpdateAppointmentWithPassword(updatedAppt);
-    } else {
-      requestPassword(() => handleUpdateAppointmentWithPassword(updatedAppt), 'edit appointment');
-    }
-  };
-
-  const handleUpdateAppointmentWithPassword = (updatedAppt) => {
     const finalUpdatedAppt = {
       ...updatedAppt,
       secondaryWorker: updatedAppt.secondaryWorker === NO_WORKER_SELECTED ? undefined : updatedAppt.secondaryWorker,
@@ -874,14 +882,6 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
   };
 
   const handleDeleteAppointment = (idToDelete) => {
-    if (userRole === 'admin') {
-      handleDeleteAppointmentWithPassword(idToDelete);
-    } else {
-      requestPassword(() => handleDeleteAppointmentWithPassword(idToDelete), 'delete appointment');
-    }
-  };
-
-  const handleDeleteAppointmentWithPassword = (idToDelete) => {
     showConfirm(
       "Are you sure you want to delete this appointment?",
       "Confirm Delete",
@@ -917,15 +917,6 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
       setDraggedAppointment(null);
       return;
     }
-
-    if (userRole === 'admin') {
-      handleDropWithPassword(targetWorker, targetDay, targetTime);
-    } else {
-      requestPassword(() => handleDropWithPassword(targetWorker, targetDay, targetTime), 'move appointment');
-    }
-  };
-
-  const handleDropWithPassword = (targetWorker, targetDay, targetTime) => {
     // Check if target slot is occupied
     const targetSlotOccupied = appointments.find(appt => 
       appt.day === targetDay && 
@@ -1006,14 +997,11 @@ function SchedulePage({ navigateToClientsWithSearch, initialSearchTerm = '', use
         options={alertDialog.options}
         onConfirm={alertDialog.onConfirm}
         onCancel={alertDialog.onCancel}
+        needsPassword={alertDialog.needsPassword}
+        userRole={userRole}
       />
 
-      <PasswordModal
-        isOpen={isPasswordModalOpen}
-        onClose={handlePasswordClose}
-        onSuccess={handlePasswordSuccess}
-        action={actionDescription}
-      />
+
 
       <div style={{
         display: 'flex',

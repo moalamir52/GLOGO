@@ -18,9 +18,9 @@ function App() {
 
   useEffect(() => {
     // Check if user was previously authenticated
-    const savedAuth = sessionStorage.getItem('glogo_authenticated');
-    const savedRole = sessionStorage.getItem('glogo_user_role');
-    const savedUsername = sessionStorage.getItem('glogo_username');
+    const savedAuth = localStorage.getItem('glogo_authenticated');
+    const savedRole = localStorage.getItem('glogo_user_role');
+    const savedUsername = localStorage.getItem('glogo_username');
     
     if (savedAuth === 'true' && savedRole && savedUsername) {
       setIsAuthenticated(true);
@@ -34,9 +34,9 @@ function App() {
     setIsAuthenticated(true);
     setUserRole(role);
     setUsername(user);
-    sessionStorage.setItem('glogo_authenticated', 'true');
-    sessionStorage.setItem('glogo_user_role', role);
-    sessionStorage.setItem('glogo_username', user);
+    localStorage.setItem('glogo_authenticated', 'true');
+    localStorage.setItem('glogo_user_role', role);
+    localStorage.setItem('glogo_username', user);
     initializeFirebaseData();
   };
 
@@ -44,9 +44,9 @@ function App() {
     setIsAuthenticated(false);
     setUserRole(null);
     setUsername('');
-    sessionStorage.removeItem('glogo_authenticated');
-    sessionStorage.removeItem('glogo_user_role');
-    sessionStorage.removeItem('glogo_username');
+    localStorage.removeItem('glogo_authenticated');
+    localStorage.removeItem('glogo_user_role');
+    localStorage.removeItem('glogo_username');
     setCurrentPage('schedule');
     setClientSearchTerm('');
     setScheduleSearchTerm('');
