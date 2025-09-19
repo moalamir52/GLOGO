@@ -47,6 +47,36 @@ function Navbar({ setCurrentPage, currentPage, onLogout, username, userRole }) {
           display: 'flex',
           alignItems: 'center',
           padding: '8px 16px',
+          marginRight: '15px'
+        }}>
+          <img 
+            src="/logo.png" 
+            alt="GLOGO Logo" 
+            style={{
+              width: '60px',
+              height: '60px',
+              borderRadius: '50%',
+              marginRight: '15px',
+              boxShadow: '0 3px 12px rgba(0, 0, 0, 0.2)',
+              objectFit: 'cover',
+              background: 'linear-gradient(135deg, #548235 0%, #6a9c3d 100%)',
+              border: '3px solid #548235',
+              padding: '4px'
+            }}
+          />
+          <span style={{ 
+            color: '#548235', 
+            fontWeight: '700', 
+            fontSize: '1.5rem',
+            textShadow: '1px 1px 2px rgba(0, 0, 0, 0.1)'
+          }}>
+            GLOGO
+          </span>
+        </div>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: '8px 16px',
           backgroundColor: userRole === 'admin' ? '#28a745' : '#17a2b8',
           borderRadius: '8px',
           marginRight: '10px'

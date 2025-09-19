@@ -25,7 +25,8 @@ const LoginScreen = ({ onLogin }) => {
     <div className="login-screen">
       <div className="login-container">
         <div className="login-header">
-          <h1>🚗 GLOGO Car Wash</h1>
+          <img src="/logo.png" alt="GLOGO Logo" className="login-logo" />
+          <h1>GLOGO Car Wash</h1>
           <p>Schedule Management System</p>
         </div>
         
